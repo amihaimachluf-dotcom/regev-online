@@ -61,7 +61,7 @@ io.on('connection', (s) => {
     if (oldHost && oldHost !== r.host && r.players.has(oldHost)) io.to(code).emit('host', { id: r.host, env: r.env });
   });
   s.on('world', ({ seed } = {}) => { if (r && r.seed == null && Number.isFinite(seed)) { r.seed = seed | 0; dirty = true; s.to(code).emit('seed', r.seed); } });
-  s.on('state', (d) => { if (!r || !d) return; const p = r.players.get(s.id); if (![d.x, d.y, d.z].every(Number.isFinite) || Math.abs(d.x) > 3e7 || Math.abs(d.z) > 3e7) return; p.beat = Date.now(); Object.assign(p, { ride: d.ride && Number.isFinite(+d.ride.x) ? { nid: String(d.ride.nid).slice(0, 24), x: +d.ride.x, y: +d.ride.y, z: +d.ride.z, yaw: +d.ride.yaw } : null, rd: !!d.rd, x: +d.x, y: +d.y, z: +d.z, yaw: +d.yaw, pitch: +d.pitch, sn: !!d.sn, sw: !!d.sw, hp: +d.hp, dead: !!d.dead }); s.volatile.to(code).emit('state', p); });
+  s.on('state', (d) => { if (!r || !d) return; const p = r.players.get(s.id); if (![d.x, d.y, d.z].every(Number.isFinite) || Math.abs(d.x) > 3e7 || Math.abs(d.z) > 3e7) return; p.beat = Date.now(); Object.assign(p, { ride: d.ride && Number.isFinite(+d.ride.x) ? { nid: String(d.ride.nid).slice(0, 24), x: +d.ride.x, y: +d.ride.y, z: +d.ride.z, yaw: +d.ride.yaw } : null, rd: !!d.rd, x: +d.x, y: +d.y, z: +d.z, yaw: +d.yaw, pitch: +d.pitch, sn: !!d.sn, sw: !!d.sw, hp: +d.hp, dead: !!d.dead, hl: Math.max(0, Math.min(15, +d.hl || 0)), hi: Number.isInteger(d.hi) ? d.hi : -1, oi: Number.isInteger(d.oi) ? d.oi : -1 }); s.volatile.to(code).emit('state', p); });
   s.on('edits', (arr) => {
     if (!r || !Array.isArray(arr)) return; const out = [];
     const me = r.players.get(s.id), host = r.host === s.id, pl = [...r.players.values()].filter((p) => Number.isFinite(p.x));
