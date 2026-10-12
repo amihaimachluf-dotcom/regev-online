@@ -6824,7 +6824,7 @@ precision highp float; precision highp int;
 precision highp sampler2DArray; precision highp sampler2DShadow;
 uniform sampler2DArray u_tex; uniform sampler2DShadow u_shadowMap;
 uniform int u_shadowsOn; uniform float u_time; uniform float u_shadowTexel;
-uniform int u_lavaLayer; uniform float u_handLight;
+uniform int u_lavaLayer; uniform float u_handLight; uniform vec4 u_pl[10]; uniform int u_npl;
 ${GLSL_LIGHT}
 in vec3 v_local; in vec3 v_rel; in vec4 v_shadow; in vec2 v_light; in float v_ao; in float v_vo; in vec3 v_wp;
 flat in int v_layer; flat in int v_normal;
@@ -6861,6 +6861,7 @@ void main() {
   if (n == 6) N = normalize(u_sunDir + vec3(0.0, 1.0, 0.0));
   float ao = 0.42 + 0.58 * (v_ao / 3.0);
   float blk = max(v_light.y, u_handLight - length(v_rel) / 15.0);   // a torch in your hand lights the way
+  for (int i = 0; i < 10; i++) { if (i >= u_npl) break; blk = max(blk, u_pl[i].w - length(v_rel - u_pl[i].xyz) / 15.0); }   // [mp] other players' held lights
   vec3 col = shade(tex.rgb, N, fs, v_light.x, blk, sh, ao);
   if (lava) col = tex.rgb * (1.04 + 0.08 * sin(u_time * 2.0 + v_wp.x + v_wp.z));
   float dist = length(v_rel);
@@ -7391,7 +7392,7 @@ class Renderer {
     // a torch, lantern or glowing mushroom in your hand lights up the area around you
     const hp = game.player, hs = hp && !hp.dead ? hp.inventory.held : null, hit = hs ? ITEMS[hs.id] : null;
     const o4 = hp && !hp.dead ? hp.inventory.armor[4] : null, oit = o4 ? ITEMS[o4.id] : null;
-    const hl = Math.max(hit ? (hit.key === 'lava_bucket' ? 13 : (hit.block !== null ? B_EMIT[hit.block] : 0)) : 0, oit && oit.block !== null ? B_EMIT[oit.block] : 0);
+    const hl = heldLightOf(hp);
     this.handLight = lerp(this.handLight || 0, hl / 15, Math.min(1, (dt || 0.016) * 8));
     const cw = this.canvas.width, ch = this.canvas.height;
     const env = this.computeEnvironment(game);
@@ -7498,6 +7499,11 @@ class Renderer {
     this.setLightUniforms(u, env);
     if (u.u_lavaLayer) gl.uniform1i(u.u_lavaLayer, T_LAVA);
     if (u.u_handLight) gl.uniform1f(u.u_handLight, this.handLight || 0);
+    if (u.u_npl) {   // [mp] remote players' held lights, camera-relative
+      const rl = this.remoteLights || [], a = this._plBuf || (this._plBuf = new Float32Array(40)); let n = 0;
+      for (const L of rl) { if (n >= 10) break; if (L.l <= 0.01) continue; a.set([L.x - cam.x, L.y - cam.y, L.z - cam.z, L.l], n * 4); n++; }
+      gl.uniform1i(u.u_npl, n); if (n && u.u_pl) gl.uniform4fv(u.u_pl, a);
+    }
     let drawn = 0;
     for (const c of list) {
       const ps = c.mesh.passes[pass];
@@ -7661,6 +7667,7 @@ class Renderer {
       if (!e.bright && !aabbInFrustum(this.planes, dx - 2, dy - 1, dz - 2, dx + 2, dy + Math.max(3, e.h + 2.5), dz + 2)) continue;
       const light = e.bright ? [1, 1] : lightOf(e.x, e.y + e.h * 0.6, e.z);
       if (this.handLight > 0.01) light[1] = Math.max(light[1], this.handLight - Math.hypot(dx, dy, dz) / 15);
+      if (this.remoteLights) for (const L of this.remoteLights) if (L.l > 0.01) light[1] = Math.max(light[1], L.l - Math.hypot(e.x - L.x, e.y + e.h * 0.6 - L.y, e.z - L.z) / 15);
       if (e.kind === 'item') { this.drawItemEntity(p, e, dx, dy, dz, light); continue; }
       if (e.kind === 'xp') { this.drawXpOrb(p, e, dx, dy, dz); continue; }
       const parts = e.model();
@@ -16199,7 +16206,14 @@ class Game {
 // ============================================================================
 //  Boot
 // ============================================================================
-window.__cls = { Game, Player, World, Renderer, UI, Spawner, Entity, ItemEntity, XpOrb, XpBottle, TableBook, Mob, Gazelle, Pichon, Hoopoe, Arrow, Pebble, FallingBlock, Archer, Spider, Grazer, Chicken, Ibex, Fish, Bat, Dog, Jackal, Scorpion, Camel, Boat, Sheep, Cow, Horse, Bear, Bee, Turtle, Dolphin, Hedgehog, Butterfly, Merchant, Golem, Golemling, Boulder, Shockwave, FireworkRocket, Sentinel, Viper, Bobber, GrappleHook, PrimedTNT, LightningBolt, uid, makeStack, packPos, MOB_TYPES, I, B, ckey };
+window.__cls = { Game, Player, World, Renderer, UI, Spawner, Entity, ItemEntity, XpOrb, XpBottle, TableBook, Mob, Gazelle, Pichon, Hoopoe, Arrow, Pebble, FallingBlock, Archer, Spider, Grazer, Chicken, Ibex, Fish, Bat, Dog, Jackal, Scorpion, Camel, Boat, Sheep, Cow, Horse, Bear, Bee, Turtle, Dolphin, Hedgehog, Butterfly, Merchant, Golem, Golemling, Boulder, Shockwave, FireworkRocket, Sentinel, Viper, Bobber, GrappleHook, PrimedTNT, LightningBolt, heldLightOf, ITEMS, uid, makeStack, packPos, MOB_TYPES, I, B, ckey };
+// light level (0-15) a player emits from the item in hand / offhand slot (shared with multiplayer)
+function heldLightOf(hp) {
+  if (!hp || hp.dead || !hp.inventory) return 0;
+  const hs = hp.inventory.held, hit = hs ? ITEMS[hs.id] : null;
+  const o4 = hp.inventory.armor ? hp.inventory.armor[4] : null, oit = o4 ? ITEMS[o4.id] : null;
+  return Math.max(hit ? (hit.key === 'lava_bucket' ? 13 : (hit.block !== null ? B_EMIT[hit.block] : 0)) : 0, oit && oit.block !== null ? B_EMIT[oit.block] : 0);
+}
 function bootRegev() {
   try {
     const game = new Game();

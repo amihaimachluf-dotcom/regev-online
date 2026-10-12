@@ -305,7 +305,7 @@
     // ---------- periodic network ----------
     setInterval(() => {
       const p = game.player; if (!MP.connected || !p || !game.world || game.state === 'loading' || !isFinite(p.x)) return;
-      s.emit('state', { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), yaw: +p.yaw.toFixed(3), pitch: +p.pitch.toFixed(3), sn: !!p.sneaking, sw: p.swingTime > 0, hp: Math.max(0, Math.ceil(p.health)), dead: !!p.dead, rd: !!p.riding,
+      s.emit('state', { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), yaw: +p.yaw.toFixed(3), pitch: +p.pitch.toFixed(3), sn: !!p.sneaking, sw: p.swingTime > 0, hp: Math.max(0, Math.ceil(p.health)), dead: !!p.dead, rd: !!p.riding, hl: C.heldLightOf ? C.heldLightOf(p) : 0, hi: p.inventory && p.inventory.held ? p.inventory.held.id : -1, oi: p.inventory && p.inventory.armor && p.inventory.armor[4] ? p.inventory.armor[4].id : -1,
         ride: (p.riding && p.riding._remote && p.riding._nid) ? { nid: p.riding._nid, x: +p.riding.x.toFixed(2), y: +p.riding.y.toFixed(2), z: +p.riding.z.toFixed(2), yaw: +(p.riding.yaw || 0).toFixed(3) } : null });
       if (MP.out.length) { s.emit('edits', MP.out.splice(0, 3000)); }
       if (MP.isHost) sendSnap();
@@ -328,6 +328,17 @@
       const dt = Math.min(0.1, (now - last) / 1000); last = now;
       const p = game.player, w = game.world;
       if (!p || !w || game.state === 'loading') { for (const g of MP.ghosts.values()) g.label.style.display = 'none'; return; }
+      // remote held lights (torch/lantern/lava bucket...): same 0-15 level as local hand light, emitted from the ghost
+      { const rl = []; const k = Math.min(1, dt * 8);
+        for (const g of MP.ghosts.values()) { const e = g.e, t = g.t;
+          const hi = t.hi >= 0 && C.ITEMS && C.ITEMS[t.hi] ? t.hi : -1, oi = t.oi >= 0 && C.ITEMS && C.ITEMS[t.oi] ? t.oi : -1;
+          if ((e.inventory.held ? e.inventory.held.id : -1) !== hi) e.inventory.held = hi >= 0 ? makeStack(hi, 1) : null;
+          if ((e.inventory.armor[4] ? e.inventory.armor[4].id : -1) !== oi) e.inventory.armor[4] = oi >= 0 ? makeStack(oi, 1) : null;
+          const target = (t.dead || e.y < -500) ? 0 : Math.max(0, Math.min(15, +t.hl || 0)) / 15;
+          g.light = (g.light || 0) + (target - (g.light || 0)) * k;
+          if (g.light > 0.01 && Math.abs(e.x - p.x) < 64 && Math.abs(e.z - p.z) < 64) rl.push({ x: e.x, y: e.y + 1.2, z: e.z, l: g.light, d: (e.x - p.x) ** 2 + (e.z - p.z) ** 2 });
+        }
+        rl.sort((a, b) => a.d - b.d); if (game.renderer) game.renderer.remoteLights = rl.slice(0, 10); }
       MP.rideMap = new Map(); for (const g of MP.ghosts.values()) if (g.t.ride && g.t.ride.nid) MP.rideMap.set(g.t.ride.nid, g);
       if (MP.chestQ) { const q = MP.chestQ; MP.chestQ = null; for (const k in q) applyChest(+k, q[k]); }
       if (MP.lastEnv && !MP.envApplied) { applyEnv(MP.lastEnv, MP.isHost); MP.envApplied = true; }
