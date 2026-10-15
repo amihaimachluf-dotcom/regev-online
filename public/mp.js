@@ -152,7 +152,7 @@
     Game.prototype.addEntity = function (e) {
       if (!hostSim() && !e._remote && (isMob(e) || e.kind === 'item' || e.kind === 'boat' || e.kind === 'butterfly' || e instanceof PrimedTNT)) {
         if (e.kind === 'butterfly') return;
-        relay('host', { t: 'spawn', cls: e.constructor.name, x: e.x, y: e.y, z: e.z, yaw: e.yaw, fuse: e.fuse, byPlayer: e.byPlayer, tamed: e.tamed, baby: e.baby });
+        relay('host', { t: 'spawn', cls: e.constructor.name, x: e.x, y: e.y, z: e.z, yaw: e.yaw, fuse: e.fuse, byPlayer: e.byPlayer, tamed: e.tamed, baby: e.baby, ci: ciOf(e) || undefined });
         return;
       }
       return origAdd.call(this, e);
@@ -189,16 +189,23 @@
         if (m.vx !== undefined) { e.vx = m.vx; e.vy = m.vy; e.vz = m.vz; } if (m.pd) e.pickupDelay = m.pd;
       } else if (m.t === 'spawn') {
         const K = C[m.cls]; if (!K) return;
-        try { const e = m.cls === 'PrimedTNT' ? new K(g, m.x, m.y, m.z, m.fuse, m.byPlayer) : (m.cls === 'Boat' ? new K(g, m.x, m.y, m.z, m.yaw) : new K(g, m.x, m.y, m.z)); if (m.tamed) e.tamed = m.tamed; if (m.baby) e.baby = m.baby; origAdd.call(g, e); } catch (er) { console.warn(er); }
+        try { const e = m.cls === 'PrimedTNT' ? new K(g, m.x, m.y, m.z, m.fuse, m.byPlayer) : (m.ci ? new K(g, m.x, m.y, m.z, m.ci) : m.cls === 'Boat' ? new K(g, m.x, m.y, m.z, m.yaw) : new K(g, m.x, m.y, m.z)); if (m.tamed) e.tamed = m.tamed; if (m.baby) e.baby = m.baby; origAdd.call(g, e); } catch (er) { console.warn(er); }
       } else if (m.t === 'mobHurt') {
         const e = g.entities.find((x) => x._nid === m.nid);
         if (e && e.damage && !e.dead) { e.damage(m.amt, m.sx, m.sz, m.knock); e.hpBarT = 4; }
       }
     }
 
+    // constructor info needed to re-create Villager / Dragon on other clients (their constructors crash or misbehave without it)
+    const ciOf = (e) => {
+      const n = e.constructor.name;
+      if (n === 'Villager') return { village: e.village, idx: e.idx, prof: e.prof, female: !!e.female, person: e.person, seed: e.seed, home: e.home, plaza: e.plaza };
+      if (n === 'Dragon') return { color: e.color, grow: e.grow, wild: !!e.wild };
+      return 0;
+    };
     // ---------- host snapshots ----------
     const SKIP = new Set(['x', 'y', 'z', 'yaw', 'vx', 'vy', 'vz', 'remove', '_nid', '_remote', 'tx', 'ty', 'tz', 'tyaw', 'kind', 'age', 'invuln']);
-    const synced = (e) => (e.kind === 'mob' && !e._ghost) || e.kind === 'item' || e.kind === 'boat' || e.kind === 'butterfly';
+    const synced = (e) => (e.kind === 'mob' && !e._ghost) || e.kind === 'item' || e.kind === 'boat' || e.kind === 'butterfly' || e.kind === 'fireball';
     let snapN = 0;
     function sendSnap() {
       const g = game; if (!g.world || !g.entities) return;
@@ -208,6 +215,7 @@
         if (!e._nid) e._nid = s.id.slice(0, 6) + (++MP.nidN).toString(36);
         const r = [e._nid, e.constructor.name, +e.x.toFixed(2), +e.y.toFixed(2), +e.z.toFixed(2), +(e.yaw || 0).toFixed(2), e.health === undefined ? 0 : +(+e.health).toFixed(1), e.dead ? 1 : 0, e.hurtTime > 0 ? 1 : 0];
         if (e.kind === 'item') r.push(e.stack.id, e.stack.n, e.stack.dur === undefined ? -1 : e.stack.dur);
+        else { const ci = ciOf(e); if (ci) r.push(ci); }
         list.push(r);
         if (full) { const o = {}; if (e.offers) o.offers = JSON.parse(JSON.stringify(e.offers)); if (e.colorIdx !== undefined) o.colorIdx = e.colorIdx; for (const k in e) { const v = e[k]; if (!SKIP.has(k) && (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string')) o[k] = v; } props[e._nid] = o; }
         if (list.length >= 250) break;
@@ -247,7 +255,7 @@
         if (!e) {
           try {
             if (cls === 'ItemEntity') e = new ItemEntity(g, x, y, z, makeStack(r[9], r[10], r[11] >= 0 ? r[11] : undefined));
-            else { const K = C[cls] || (C.MOB_TYPES && Object.values(C.MOB_TYPES).find((k) => k.name === cls)); if (!K) continue; e = new K(g, x, y, z); }
+            else { const K = C[cls] || (C.MOB_TYPES && Object.values(C.MOB_TYPES).find((k) => k.name === cls)); if (!K) continue; e = r[9] && typeof r[9] === 'object' ? new K(g, x, y, z, r[9]) : new K(g, x, y, z); }
           } catch (er) { continue; }
           e._nid = nid; e._remote = true; e.yaw = yaw; e.update = proxyUpdate; if (e.kind === 'mob' || e.kind === 'boat') e.damage = proxyDamage;
           MP.proxies.set(nid, e); g.entities.push(e);
@@ -417,7 +425,7 @@
     };
     function hostTrade(m) {
       const e = game.entities.find((x) => x._nid === m.nid), o = e && e.offers && e.offers[m.idx];
-      const ok = !!(o && o.left > 0); if (ok) o.left--;
+      const ok = !!(o && o.left > 0); if (ok) { o.left--; if (e.type === 'villager' && e.rec) try { const rc = e.rec(); rc.u[o.i] = (rc.u[o.i] || 0) + 1; rc.t++; } catch (er) {} }
       relay(m.from, { t: 'tradeRes', nid: m.nid, idx: m.idx, ok, left: o ? o.left : 0 });
       if (game.ui.tradeWith === e) try { game.ui.renderTrade(); } catch (er) {}
     }

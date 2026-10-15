@@ -162,6 +162,9 @@ html.no-fs-ui .fs-btn { display: none !important; }
 #fps { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); left: 8px; font: 700 12px var(--font); background: rgba(0,0,0,.45); padding: 3px 7px; border-radius: 3px; direction: ltr; }
 #vignette { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 140px 30px rgba(190,20,20,.75); opacity: 0; transition: opacity .35s; }
 #water { position: absolute; inset: 0; pointer-events: none; background: rgba(30,80,140,.28); opacity: 0; transition: opacity .2s; }
+#tripfx { position: absolute; inset: 0; pointer-events: none; opacity: 0; mix-blend-mode: overlay; }
+.trade-row.locked { opacity: .38; }
+.trade-row.locked .left { color: var(--sand); }
 #fade { position: absolute; inset: 0; background: #05060a; opacity: 0; pointer-events: none; transition: opacity 1.4s; display: flex; align-items: center; justify-content: center; font: 700 22px var(--font); color: var(--mist); }
 #clickPlay { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(8,10,14,.55); pointer-events: auto; cursor: pointer; }
 #clickPlay.on { display: flex; }
@@ -407,6 +410,28 @@ html.pad #clickPlay { display: none !important; }
   .ench-opts { min-width: 0; }
 }
 @media (max-width: 430px) { :root { --slot: 36px; } }
+/* v2.9: on a phone the bag and the crafting are two pages of one panel, turned by the button beside "מיון" */
+.inv:not(.phone) .phone-only { display: none !important; }
+.inv.chest-mode #bCraftTab { display: none !important; }
+.inv.phone { grid-template-columns: minmax(0, 1fr); }
+.inv.phone:not(.craft-view) #craftCol, .inv.phone.chest-mode #craftCol { display: none; }
+.inv.phone.craft-view:not(.chest-mode) > .inv-col:first-child { display: none; }
+.inv.phone.craft-view:not(.chest-mode) { width: 96vw; max-width: 760px; height: 94%; grid-template-rows: minmax(0, 1fr); overflow: hidden; }
+.inv.phone.craft-view #craftCol { overflow: hidden; min-height: 0; }
+.inv.phone.craft-view #recipes { flex: 1 1 0; min-height: 76px; max-height: none; align-content: start; grid-template-columns: repeat(auto-fill, minmax(var(--slot), 1fr)); }
+.inv.phone.craft-view #detail { flex: none; min-height: 0; max-height: 46%; overflow-y: auto; }
+@media (orientation: landscape) {
+  .inv.phone.craft-view:not(.chest-mode) { height: 96%; }
+  .inv.phone.craft-view:not(.chest-mode) #craftCol { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 42%); grid-template-rows: auto auto auto auto minmax(0, 1fr);
+    grid-template-areas: "h h" "q d" "s d" "t d" "r d"; column-gap: 12px; row-gap: 8px; }
+  .inv.phone.craft-view #craftCol > h3 { grid-area: h; }
+  .inv.phone.craft-view #recipeSearch { grid-area: q; padding: 5px 10px; }
+  .inv.phone.craft-view #stations { grid-area: s; flex-wrap: nowrap; overflow-x: auto; }
+  .inv.phone.craft-view #tabs { grid-area: t; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .inv.phone.craft-view .tab, .inv.phone.craft-view .station { flex: none; }
+  .inv.phone.craft-view #recipes { grid-area: r; min-height: 0; }
+  .inv.phone.craft-view #detail { grid-area: d; max-height: none; align-self: stretch; }
+}
 @media (prefers-reduced-motion: reduce) { .toast, .pick, #food.hungry img { animation: none; } #fade, #biome { transition: none; } }
 </style>
 </head>
@@ -447,6 +472,7 @@ html.pad #clickPlay { display: none !important; }
       <div class="tbtn" id="tMap" aria-label="מפה">מפה</div>
     </div>
     <div id="clickPlay"><div class="panel">לחצו כדי לחזור למשחק</div></div>
+    <div id="tripfx"></div>
     <div id="fade"></div>
   </div>
 
@@ -460,7 +486,7 @@ html.pad #clickPlay { display: none !important; }
       <button class="btn" id="bHelp">איך משחקים</button>
     </div>
     <button class="btn small fs-btn" id="bFsMenu"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path class="fs-in" d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/><path class="fs-out" d="M9 3v6H3M15 3v6h6M21 15h-6v6M3 15h6v6"/></svg><span class="fs-label">מסך מלא</span></button>
-    <div class="version">REGEV v2.6</div>
+    <div class="version">REGEV v3.0</div>
   </div>
 
   <div id="worlds" class="screen">
@@ -501,7 +527,7 @@ html.pad #clickPlay { display: none !important; }
     <div class="dim" id="invDim"></div>
     <div class="inv panel" id="invPanel">
       <div class="inv-col">
-        <h3><span id="invTitle">תיק</span> <span class="inv-head-btns"><button class="btn small" id="bSort" title="מסדר את התיק ומאחד ערמות">מיון</button><button class="btn small icon-btn" id="bInvClose" aria-label="סגירה">✕</button></span></h3>
+        <h3><span id="invTitle">תיק</span> <span class="inv-head-btns"><button class="btn small primary phone-only" id="bCraftTab" title="מעבר למסך היצירה">יצירה</button><button class="btn small" id="bSort" title="מסדר את התיק ומאחד ערמות">מיון</button><button class="btn small icon-btn" id="bInvClose" aria-label="סגירה">✕</button></span></h3>
         <div id="chestBox" class="hidden"><div class="grid" id="invChest"></div><div class="sub-h">התיק שלך</div></div>
         <div id="workBox" class="hidden">
           <div id="enchPanel" class="work-panel">
@@ -525,7 +551,7 @@ html.pad #clickPlay { display: none !important; }
         <div class="grid" id="invBar"></div>
       </div>
       <div class="inv-col" id="craftCol">
-        <h3>יצירה</h3>
+        <h3><span>יצירה</span> <span class="inv-head-btns phone-only"><button class="btn small primary" id="bBagTab" title="חזרה לתיק">תיק</button><button class="btn small icon-btn" id="bInvClose2" aria-label="סגירה">✕</button></span></h3>
         <input type="text" id="recipeSearch" placeholder="חיפוש מתכון…" autocomplete="off" aria-label="חיפוש מתכון">
         <div class="stations" id="stations"></div>
         <div class="tabs" id="tabs"></div>
@@ -601,8 +627,8 @@ html.pad #clickPlay { display: none !important; }
   <div id="trade" class="screen">
     <div class="dim"></div>
     <div class="dialog panel" style="width:min(94vw,560px)">
-      <div class="dialog-head"><h2>רוכל נודד</h2><span class="chip" id="tradeGold"></span></div>
-      <div class="dialog-body"><p class="hint">מחליפים סחורה בזהב, וזהב בסחורה. כל הצעה מוגבלת — והרוכל לא נשאר לנצח.</p><div class="trade-list" id="tradeList"></div></div>
+      <div class="dialog-head"><h2 id="tradeTitle">רוכל נודד</h2><span class="chip" id="tradeGold"></span></div>
+      <div class="dialog-body"><p class="hint" id="tradeHint">מחליפים סחורה בזהב, וזהב בסחורה. כל הצעה מוגבלת — והרוכל לא נשאר לנצח.</p><div class="trade-list" id="tradeList"></div></div>
       <div class="dialog-foot"><button class="btn primary" id="bTradeClose">סיום</button></div>
     </div>
   </div>
@@ -655,7 +681,11 @@ const CS = 16;                 // chunk width (x,z)
 const WH = 128;                // world height
 const CHUNK_VOL = CS * CS * WH;
 const SEA_LEVEL = 50;
-const DAY_LENGTH = 720;        // seconds for a full day/night cycle
+const DAY_LENGTH = 720;        // (the old cycle: 6 minutes of sun, 6 of dark)
+// v3.0: a long day — the sun takes ~15 minutes to cross the sky, the night stays ~6. The clock slows
+// smoothly through dawn and quickens through dusk, so the sun never jumps.
+const DAY_HALF = 960, NIGHT_HALF = 360;
+const dayRate = (t) => 0.5 / lerp(NIGHT_HALF, DAY_HALF, smoothstep(-0.2, 0.2, Math.sin(t * Math.PI * 2)));
 const GAME_VERSION = 1;
 
 const ckey = (cx, cz) => cx * 65536 + cz;
@@ -1802,6 +1832,28 @@ Tex.def('mud', (p, r) => {
   for (let i = 0; i < 7; i++) p.set((r() * 16) | 0, (r() * 16) | 0, [132, 122, 112]);   // a wet shine
 });
 Tex.def('salt_bricks', (p, r) => brickWall(p, r, [180, 172, 156], [238, 234, 224], 8));
+// v2.7: hallucination mushrooms — little brown bells on thin pale stems, bruised blue at the foot
+// v2.8: a dragon's egg — dark and speckled, with embers glowing in its cracks
+Tex.def('dr_egg', (p, r) => {
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, sh(mixc([58, 34, 72], [26, 16, 34], y / 15), 0.88 + r() * 0.2));
+  for (let i = 0; i < 18; i++) p.set((r() * 16) | 0, (r() * 16) | 0, [120, 84, 150]);
+  let x = 3, y = 1;
+  for (let i = 0; i < 14; i++) { p.set(x, y, [255, 150, 60]); if (r() < 0.5) p.set(x + 1, y, [250, 214, 120]); x = clamp(x + ((r() * 3) | 0) - 1, 1, 14); y++; }
+  x = 12; y = 4;
+  for (let i = 0; i < 8; i++) { p.set(x, y, [255, 126, 48]); x = clamp(x + ((r() * 3) | 0) - 1, 1, 14); y++; }
+});
+Tex.def('trip_mushroom', (p, r) => {
+  p.clear();
+  for (const [cx, ty, hw] of [[4, 7, 2.6], [10, 3, 3.2], [7, 10, 2]]) {
+    for (let y = ty + 2; y < 16; y++) { const sx = Math.round(cx + Math.sin(y * 0.7 + cx) * 0.6); p.set(sx, y, y > 13 ? [104, 126, 200] : [234, 224, 198]); }
+    for (let dy = 0; dy < 3; dy++) for (let dx = -Math.ceil(hw); dx <= Math.ceil(hw); dx++) {
+      if (Math.abs(dx) > hw * (0.42 + dy * 0.3)) continue;
+      p.set(Math.round(cx + dx), ty + dy, sh(dy === 0 ? [148, 94, 50] : (dy === 2 ? [212, 160, 96] : [192, 136, 78]), 0.92 + r() * 0.12));
+    }
+    p.set(cx, ty - 1, [116, 68, 34]);
+  }
+  p.set(11, 4, [190, 150, 255]); p.set(5, 8, [190, 150, 255]);
+});
 Tex.def('salt_lamp', (p, r) => {
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, sh(mixc([255, 200, 146], [226, 112, 72], Math.hypot(x - 7.5, y - 7.5) / 10.6), 0.94 + r() * 0.1));
   for (let i = 0; i < 6; i++) { const x = 1 + ((r() * 12) | 0), y = 1 + ((r() * 13) | 0); pxLine(p, x, y, x + 2, y + 1, [255, 230, 196], 1); }
@@ -2517,6 +2569,21 @@ Tex.def('i_detector', IC((p) => {
   pxPoly(p, [[10, 3], [13, 5], [12, 7], [9, 5]], [40, 118, 70]);
   p.set(11, 5, [150, 255, 160]); p.set(14, 0, [60, 60, 66]); p.set(15, 0, [60, 60, 66]);
 }));
+Tex.def('i_dragon_egg', IC((p) => {
+  for (let y = 1; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const dx = (x - 7.5) / (y < 8 ? 4.6 : 5.6), dy = (y - 9) / 6.5;
+    if (dx * dx + dy * dy <= 1) p.set(x, y, mixc([92, 56, 120], [34, 20, 44], (y - 1) / 15));
+  }
+  pxLine(p, 6, 3, 8, 8, [255, 160, 70], 1); pxLine(p, 8, 8, 6, 12, [255, 130, 50], 1); pxLine(p, 10, 6, 11, 10, [255, 140, 60], 1);
+  p.set(5, 5, [170, 130, 200]); p.set(10, 12, [170, 130, 200]);
+}));
+Tex.def('i_trip_shroom', IC((p) => {
+  pxLine(p, 7, 8, 6, 15, [236, 226, 200], 2); p.set(6, 14, [104, 126, 200]); p.set(7, 15, [104, 126, 200]);
+  pxPoly(p, [[2, 9], [5, 4], [8, 2], [11, 4], [14, 9]], [196, 138, 78]);
+  pxPoly(p, [[4, 6], [6, 3.5], [8, 2], [10, 3.5], [12, 6]], [150, 94, 50]);
+  p.set(8, 1, [116, 68, 34]);
+  for (const [x, y] of [[3, 3], [13, 2], [2, 12], [12, 12], [14, 7]]) p.set(x, y, [200, 160, 255]);
+}));
 Tex.def('i_anvil', IC((p) => {
   pxPoly(p, [[1, 4], [15, 4], [15, 7], [12, 7], [10, 9], [10, 11], [13, 13], [13, 14], [3, 14], [3, 13], [6, 11], [6, 9], [4, 7], [1, 6]], [70, 70, 78]);
   for (let x = 1; x < 15; x++) p.set(x, 4, [128, 128, 138]);
@@ -2649,6 +2716,67 @@ Tex.def('mc_hat', (p, r) => {
   p.noise([238, 236, 228], 0.04, r);
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if ((x + y) % 6 === 0 || (x - y + 32) % 6 === 0) p.set(x, y, [176, 52, 52]);
 });
+// v2.7: villagers — a robe for every trade, a few faces, and what they wear on their heads
+const VL_ROBES = { farmer: [[112, 128, 70], [84, 98, 50]], fisher: [[66, 104, 150], [46, 76, 114]], smith: [[96, 72, 52], [56, 46, 40]], scribe: [[104, 70, 130], [76, 50, 98]],
+  shepherd: [[214, 204, 180], [166, 152, 126]], herbalist: [[70, 140, 128], [50, 104, 96]], mason: [[190, 120, 70], [148, 90, 50]] };
+for (const k in VL_ROBES) Tex.def('vl_robe_' + k, (p, r) => {
+  const [a, b] = VL_ROBES[k];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, sh(y >= 13 || x === 7 || x === 8 ? b : a, 0.93 + r() * 0.1));
+  if (k === 'smith') for (let y = 3; y < 15; y++) for (let x = 3; x < 13; x++) p.set(x, y, sh([44, 38, 34], 0.92 + r() * 0.12));   // a leather apron
+  if (k === 'farmer') for (let y = 0; y < 16; y++) { p.set(4, y, [70, 58, 40]); p.set(11, y, [70, 58, 40]); }   // braces
+  if (k === 'scribe' || k === 'herbalist') for (let y = 0; y < 16; y++) p.set(7, y, [226, 196, 96]);
+});
+function vlFace(p, r, beard, glasses) {
+  const S = [204, 160, 120], H = [62, 46, 36];
+  p.noise(S, 0.05, r);
+  for (let x = 0; x < 16; x++) { p.set(x, 0, H); p.set(x, 1, H); }
+  for (const ex of [3, 10]) { p.set(ex, 6, [250, 250, 250]); p.set(ex + 1, 6, [40, 30, 22]); p.set(ex, 5, [70, 52, 38]); p.set(ex + 1, 5, [70, 52, 38]); }
+  p.set(7, 8, sh(S, 0.82)); p.set(8, 8, sh(S, 0.82)); p.set(7, 9, sh(S, 0.88));
+  if (beard) { for (let y = 10; y < 16; y++) for (let x = 3; x < 13; x++) if (y > 10 || (x > 4 && x < 11)) p.set(x, y, sh(H, 0.9 + r() * 0.2)); for (let x = 6; x < 10; x++) p.set(x, 11, [140, 80, 70]); }
+  else { for (let x = 6; x < 10; x++) p.set(x, 11, [176, 92, 84]); for (let y = 2; y < 15; y++) { p.set(0, y, H); p.set(15, y, H); } }
+  if (glasses) for (const ex of [2, 9]) { for (let i = 0; i < 5; i++) { p.set(ex + i, 4, [28, 28, 32]); p.set(ex + i, 7, [28, 28, 32]); } p.set(ex, 5, [28, 28, 32]); p.set(ex, 6, [28, 28, 32]); p.set(ex + 4, 5, [28, 28, 32]); p.set(ex + 4, 6, [28, 28, 32]); p.set(7, 5, [28, 28, 32]); p.set(8, 5, [28, 28, 32]); }
+}
+Tex.def('vl_face_m', (p, r) => vlFace(p, r, true, false));
+Tex.def('vl_face_f', (p, r) => vlFace(p, r, false, false));
+Tex.def('vl_face_mg', (p, r) => vlFace(p, r, true, true));
+Tex.def('vl_face_fg', (p, r) => vlFace(p, r, false, true));
+Tex.def('vl_hair', (p, r) => p.noise([62, 46, 36], 0.16, r));
+Tex.def('vl_tembel', (p, r) => { p.noise([72, 106, 172], 0.08, r); for (let x = 0; x < 16; x++) p.set(x, 15, [50, 76, 132]); });   // a kova tembel
+Tex.def('vl_cap', (p, r) => p.noise([204, 186, 140], 0.08, r));
+Tex.def('vl_capo', (p, r) => p.noise([226, 138, 58], 0.08, r));
+Tex.def('vl_keffiyeh', (p, r) => { p.noise([238, 236, 230], 0.04, r); for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) if ((x + y) % 5 === 0 || (x - y + 32) % 5 === 0) p.set(x, y, [44, 44, 48]); });
+Tex.def('vl_scarf', (p, r) => { p.noise([92, 150, 112], 0.08, r); for (let i = 0; i < 12; i++) p.set((r() * 16) | 0, (r() * 16) | 0, [236, 214, 120]); });
+// v2.8: dragons — scales, belly plates, wings, a face and an eye for each colour, and bone-white horns
+const DRAGON_COLORS = [['אדום', [168, 44, 38], [236, 160, 90]], ['ירוק', [46, 116, 62], [186, 214, 120]], ['זהוב', [190, 142, 36], [252, 228, 146]], ['סגול', [98, 56, 146], [206, 168, 234]]];
+DRAGON_COLORS.forEach(([, a, b], i) => {
+  Tex.def('dr_scale' + i, (p, r) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const row = y >> 2, cx = ((x + (row & 1) * 2) % 4), cy = y & 3, edge = cy === 3 || (cy >= 1 && (cx === 0));
+      p.set(x, y, sh(a, (edge ? 0.7 : 1) * (0.9 + r() * 0.16) * (cy === 0 ? 1.12 : 1)));
+    }
+  });
+  Tex.def('dr_belly' + i, (p, r) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, sh(b, (y % 3 === 2 ? 0.78 : 1) * (0.92 + r() * 0.1))); });
+  Tex.def('dr_wing' + i, (p, r) => {
+    const m = mixc(a, b, 0.25);
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, sh(m, 0.82 + r() * 0.12 + y * 0.008));
+    for (const [x0, x1] of [[0, 15], [0, 10], [0, 4]]) pxLine(p, x0, 0, x1, 15, sh(a, 0.55), 1);   // the long finger bones
+    for (let x = 0; x < 16; x++) p.set(x, 0, sh(a, 0.5));
+  });
+  Tex.def('dr_face' + i, (p, r) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, sh(a, 0.88 + r() * 0.16));
+    for (const x of [4, 11]) { p.set(x, 4, [20, 10, 10]); p.set(x, 5, [20, 10, 10]); }
+    for (let x = 1; x < 15; x++) p.set(x, 12, [50, 16, 14]);
+    for (const x of [2, 5, 8, 11, 13]) { p.set(x, 13, [246, 240, 220]); p.set(x, 11, [246, 240, 220]); }
+  });
+  Tex.def('dr_eye' + i, (p, r) => {
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, sh(a, 0.88 + r() * 0.16));
+    for (let x = 3; x < 9; x++) for (let y = 4; y < 8; y++) p.set(x, y, [255, 214, 70]);
+    for (let y = 4; y < 8; y++) p.set(6, y, [20, 10, 6]);
+    for (let x = 2; x < 10; x++) p.set(x, 3, sh(a, 0.55));
+  });
+});
+Tex.def('dr_horn', (p, r) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, sh(mixc([236, 226, 196], [150, 132, 104], y / 15), 0.92 + r() * 0.1)); });
+Tex.def('dr_fire', (p, r) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, mixc([255, 240, 150], [255, 110, 30], clamp(Math.hypot(x - 7.5, y - 7.5) / 9 + r() * 0.2, 0, 1))); });
 Tex.def('mc_pack', (p, r) => {
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
     const band = Math.floor(y / 3) % 3;
@@ -2933,6 +3061,11 @@ defBlock(136, 'salt_crystal', Object.assign({}, CROSS_O, { name: 'גבישי מ�
 defBlock(137, 'mud', { name: 'בוץ', tex: 'mud', hardness: 0.5, tool: 'shovel', sound: 'dirt' });
 defBlock(138, 'salt_bricks', { name: 'לבני מלח', tex: 'salt_bricks', hardness: 1.5, tool: 'pickaxe', tier: 1 });
 defBlock(139, 'salt_lamp', { name: 'מנורת מלח', tex: 'salt_lamp', hardness: 0.5, emit: 13, sound: 'glass' });
+// v2.7: hallucination mushrooms grow wild in shady corners of the forests; they glow faintly at night
+// v2.8: a dragon's egg lying in its nest (picked up, it is an item you set down beside a fire to hatch)
+defBlock(141, 'dragon_egg_b', { name: 'ביצת דרקון', tex: 'dr_egg', icon: 'i_dragon_egg', model: MODEL.SMALL, pass: PASS.CUTOUT, solid: true, opaque: false, absorb: 0, hardness: 0.5, emit: 3, item: false,
+  drop: () => [['dragon_egg', 1]], boxes: [[5, 0, 5, 11, 2, 11], [4, 2, 4, 12, 8, 12], [5, 8, 5, 11, 11, 11], [6, 11, 6, 10, 13, 10]] });
+defBlock(140, 'trip_mushroom', Object.assign({}, CROSS_O, { name: 'פטריות הזיה', tex: 'trip_mushroom', hardness: 0, emit: 4, item: false, drop: (r) => [['trip_shroom', 1 + (r() < 0.35 ? 1 : 0)]] }));
 defBlock(111, 'beehive', { name: 'כוורת', tex: { top: 'hive_top', bottom: 'hive_top', side: 'hive_side' }, iconFront: 'hive_front', hardness: 0.6, tool: 'axe', sound: 'wood', use: 'hive' });
 
 B_TARGET[B.portal] = 0; B_TARGET[B.portal_z] = 0;   // you look (and reach) right through a gate
@@ -3054,6 +3187,8 @@ defItem(412, 'salt', { name: 'מלח', icon: 'i_salt' });
 defItem(413, 'grapple', { name: 'וו טיפוס', icon: 'i_grapple', stack: 1, maxDur: 250 });
 defItem(414, 'detector', { name: 'גלאי מתכות', icon: 'i_detector', stack: 1 });
 defItem(415, 'salted_fish', { name: 'דג מלוח', icon: 'i_salted_fish', food: 6, sat: 7.2, stack: 32 });
+defItem(417, 'dragon_egg', { name: 'ביצת דרקון', icon: 'i_dragon_egg', stack: 1 });   // v2.8
+defItem(416, 'trip_shroom', { name: 'פטריית הזיה', icon: 'i_trip_shroom', food: 1, sat: 0.5, stack: 16, effect: ['trip', 45] });   // v2.7
 // v2.3: tools of sky metal — faster and tougher than diamond, they mine anything diamond can (obsidian too)
 {
   const SKY = { pickaxe: [381, 'מכוש', 6, 0.8], axe: [382, 'גרזן', 8.5, 0.95], shovel: [383, 'את', 5.5, 0.8], sword: [384, 'חרב', 9.5, 0.6], hoe: [385, 'מעדר', 3, 0.5] };
@@ -3139,7 +3274,7 @@ const GROUP_NAMES = { logs: 'גזע עץ (כל סוג)' };
 const SHEARABLE = new Set([B.oak_leaves, B.pine_leaves, B.acacia_leaves, B.palm_leaves, B.olive_leaves, B.tall_grass, B.dead_bush, B.cobweb, B.reeds]);
 const WOOLS = new Set([B.wool, B.red_wool, B.yellow_wool, B.blue_wool, B.carpet, B.red_carpet, B.blue_carpet]);
 const CROPS = new Set([B.wheat, B.watermelon, B.chickpea, B.weed]);
-const MAIN_USES = new Set(['spyglass', 'flute', 'fishing_rod', 'boat', 'bucket', 'water_bucket', 'lava_bucket', 'flint', 'firework', 'golem_heart', 'weed_leaf', 'dried_weed', 'bone', 'jar', 'xp_bottle', 'grapple']);
+const MAIN_USES = new Set(['spyglass', 'flute', 'fishing_rod', 'boat', 'bucket', 'water_bucket', 'lava_bucket', 'flint', 'firework', 'golem_heart', 'weed_leaf', 'dried_weed', 'bone', 'jar', 'xp_bottle', 'grapple', 'dragon_egg']);
 const SEED_CROP = { seeds: 'wheat', watermelon_seeds: 'watermelon', chickpeas: 'chickpea', weed_seeds: 'weed' };
 
 // ============================================================================
@@ -3568,7 +3703,7 @@ class TerrainGen {
     this.nCaveD = new Noise(s ^ 0x5d21); this.nRav = new Noise(s ^ 0x6e31); this.nRavB = new Noise(s ^ 0x7f42);   // v1.4
     this.nSalt = new Noise(s ^ 0x5a175);   // v2.6
     this.structs = new Structures(this);
-    this.featExclude = []; this.feat15Exclude = []; this.feat16Exclude = []; this.feat17Exclude = []; this.feat18Exclude = []; this.feat19Exclude = []; this.feat20Exclude = []; this.oldZones = []; this.mines = new Map(); this.craters = new Map();
+    this.featExclude = []; this.feat15Exclude = []; this.feat16Exclude = []; this.feat17Exclude = []; this.feat18Exclude = []; this.feat19Exclude = []; this.feat20Exclude = []; this.feat21Exclude = []; this.feat22Exclude = []; this.oldZones = []; this.mines = new Map(); this.craters = new Map();
     this.col = {};
     this._H = new Int16Array(18 * 18);
     this._G = new Float32Array(5 * 5 * 33);
@@ -3770,6 +3905,7 @@ class TerrainGen {
       o.fresh = fresh; o.fresh15 = fresh && !this.inZones(this.feat15Exclude, wx, wz); o.fresh16 = o.fresh15 && !this.inZones(this.feat16Exclude, wx, wz);
       o.fresh17 = o.fresh16 && !this.inZones(this.feat17Exclude, wx, wz);
       o.fresh18 = o.fresh17 && !this.inZones(this.feat18Exclude, wx, wz);
+      o.fresh21 = o.fresh18 && !this.inZones(this.feat19Exclude, wx, wz) && !this.inZones(this.feat20Exclude, wx, wz) && !this.inZones(this.feat21Exclude, wx, wz);
       // v1.7: crater walls show their coloured layers; the floor is sand and gravel
       const inCrater = o.crater > 0 && o.crater < 1.7;
       if (inCrater) {
@@ -3923,6 +4059,10 @@ class TerrainGen {
       const above = (h + 1 << 8) | (z << 4) | x;
       if (blocks[above] !== B.air) continue;
       const wx = x0 + x, wz = z0 + z, r = hashF2(wx, wz, seed ^ 0xdec0);
+      // v2.7: hallucination mushrooms, in shady patches of the forests (and here and there in the mountains)
+      if (o.fresh21 && (top === B.grass || top === B.snowy_grass || top === B.dirt) && (o.biome === BIOME.FOREST || o.biome === BIOME.TAIGA || o.biome === BIOME.MOUNTAINS)) {
+        if (hashF2(wx, wz, seed ^ 0x7212) < 0.22 && this.nMisc.noise2(wx / 11 + 777, wz / 11 - 333) > 0.72) { blocks[above] = B.trip_mushroom; continue; }
+      }
       if (o.fresh) {
         // v1.4: reeds along the water's edge, berry bushes in forests
         const r2 = hashF2(wx, wz, seed ^ 0xbe11), hi = (z + 1) * 18 + x + 1;
@@ -4214,6 +4354,7 @@ class TerrainGen {
   fresh18(x, z) { return this.fresh17(x, z) && !this.inZones(this.feat18Exclude, x, z); }
   fresh18Wide(x, z, pad) { return this.fresh17Wide(x, z, pad) && !this.inZones(this.feat18Exclude, x, z, pad); }
   fresh19Wide(x, z, pad) { return this.fresh18Wide(x, z, pad) && !this.inZones(this.feat19Exclude, x, z, pad); }
+  fresh22Wide(x, z, pad) { return this.fresh20Wide(x, z, pad) && !this.inZones(this.feat21Exclude, x, z, pad) && !this.inZones(this.feat22Exclude, x, z, pad); }
   fresh20Wide(x, z, pad) { return this.fresh19Wide(x, z, pad) && !this.inZones(this.feat20Exclude, x, z, pad); }
   // v2.6: how much of the salt sea's basin a column belongs to (0..1); also leaves the lake's depth and the flats' height in _lake/_flat
   saltAt(x, z, temp, hum, land, mf, off) {
@@ -4378,7 +4519,7 @@ function buildTree(type, x, y, z, rnd, put) {
 // ============================================================================
 const STRUCT_TYPES = {
   temple: { id: 1, name: 'מקדש החולות', region: 176, margin: 28, chance: 0.8, salt: 0x51e7e, radius: 13, discover: 13 },
-  village: { id: 2, name: 'כפר נטוש', region: 304, margin: 44, chance: 0.85, salt: 0x7a11a, radius: 25, discover: 21 },
+  village: { id: 2, name: 'כפר', region: 304, margin: 44, chance: 0.85, salt: 0x7a11a, radius: 25, discover: 21 },
   tower: { id: 3, name: 'מגדל עתיק', region: 208, margin: 24, chance: 0.6, salt: 0x70e3, radius: 5, discover: 9 },
   oasis: { id: 4, name: 'נווה מדבר', region: 224, margin: 30, chance: 0.75, salt: 0x0a515, radius: 13, discover: 11, v15: true },
   wreck: { id: 5, name: 'ספינה טרופה', region: 272, margin: 30, chance: 0.6, salt: 0x3ec4, radius: 10, discover: 13, v17: true },
@@ -4388,6 +4529,7 @@ const STRUCT_TYPES = {
   sunken: { id: 8, name: 'מקדש שקוע', region: 384, margin: 44, chance: 0.85, salt: 0x5c4e7, radius: 11, discover: 18, tries: 10, v20: true },
   grove: { id: 9, name: 'מקדש היער', region: 352, margin: 40, chance: 0.85, salt: 0x6407e, radius: 12, treeR: 13, discover: 15, tries: 10, v20: true },
   saltfort: { id: 10, name: 'מצודת המלח', region: 288, margin: 32, chance: 0.97, salt: 0x5a17f, radius: 13, discover: 17, tries: 48, v20: true },
+  nest: { id: 11, name: 'קן הדרקון', region: 448, margin: 48, chance: 0.92, salt: 0xd7a90, radius: 9, discover: 14, tries: 30, v20: true, v22: true },   // v2.8
 };
 // v1.4+: structures are spread further apart (worlds started in v1.3 keep the table above)
 const STRUCT_TYPES_V3 = {
@@ -4401,6 +4543,7 @@ const STRUCT_TYPES_V3 = {
   sunken: STRUCT_TYPES.sunken,
   grove: STRUCT_TYPES.grove,
   saltfort: STRUCT_TYPES.saltfort,
+  nest: STRUCT_TYPES.nest,
 };
 // loot tables by id: [itemKey, min, max, weight]
 const LOOT = [null,
@@ -4437,7 +4580,7 @@ const LOOT = [null,
     ['arrow', 4, 12, 6], ['bow', 1, 1, 2], ['iron_sword', 1, 1, 2], ['iron_chestplate', 1, 1, 1], ['iron_helmet', 1, 1, 1], ['shield', 1, 1, 2], ['cooked_meat', 2, 4, 7],
     ['crystal', 1, 3, 5], ['map', 1, 1, 2], ['sage_tea', 1, 2, 3], ['obsidian', 1, 4, 6], ['ench_book', 1, 1, 4], ['xp_bottle', 2, 6, 4]] },
   // sky tower (v2.0): the wings are always there
-  { rolls: [3, 5], enchChance: 0.65, always: [['firework', 6, 14]], rare: [['wings', 1, 1, 0.2]], items: [['raw_skymetal', 1, 4, 7], ['sky_ingot', 1, 2, 4], ['diamond', 1, 3, 6], ['golden_apple', 1, 2, 6], ['crystal_block', 1, 2, 4], ['gold_block', 1, 1, 3],
+  { rolls: [3, 5], enchChance: 0.65, always: [['firework', 6, 14]], rare: [['wings', 1, 1, 0.2], ['dragon_egg', 1, 1, 0.08]], items: [['raw_skymetal', 1, 4, 7], ['sky_ingot', 1, 2, 4], ['diamond', 1, 3, 6], ['golden_apple', 1, 2, 6], ['crystal_block', 1, 2, 4], ['gold_block', 1, 1, 3],
     ['diamond_sword', 1, 1, 2], ['diamond_pickaxe', 1, 1, 2], ['lantern', 1, 3, 4], ['firework', 4, 10, 8], ['blue_carpet', 2, 6, 4], ['honey_cake', 1, 2, 4], ['spyglass', 1, 1, 2], ['ench_book', 1, 1, 6], ['xp_bottle', 3, 8, 6]] },
   // sunken temple (v2.6)
   { rolls: [4, 6], enchChance: 0.55, always: [['gold_ingot', 3, 8]], items: [['diamond', 1, 3, 5], ['gold_ingot', 2, 6, 8], ['crystal_block', 1, 3, 4], ['golden_apple', 1, 2, 4],
@@ -4446,11 +4589,14 @@ const LOOT = [null,
   // forest temple (v2.6): bring something to climb with
   { rolls: [3, 5], enchChance: 0.5, items: [['grapple', 1, 1, 4], ['bow', 1, 1, 4], ['arrow', 6, 16, 8], ['honey_jar', 1, 2, 4], ['berries', 2, 6, 6], ['sapling', 1, 3, 4],
     ['gold_ingot', 1, 4, 6], ['diamond', 1, 2, 3], ['golden_apple', 1, 1, 3], ['ench_book', 1, 1, 4], ['xp_bottle', 2, 5, 4], ['iron_axe', 1, 1, 2],
-    ['crystal', 1, 3, 4], ['honey_cake', 1, 1, 2], ['string', 2, 5, 5], ['iron_sword', 1, 1, 2]] },
+    ['crystal', 1, 3, 4], ['honey_cake', 1, 1, 2], ['string', 2, 5, 5], ['iron_sword', 1, 1, 2], ['trip_shroom', 1, 3, 3]] },
   // salt fortress (v2.6)
   { rolls: [3, 5], enchChance: 0.45, items: [['salt', 3, 10, 8], ['salted_fish', 2, 5, 6], ['detector', 1, 1, 3], ['gold_ingot', 2, 5, 7], ['iron_ingot', 2, 5, 7],
     ['diamond', 1, 2, 3], ['golden_apple', 1, 1, 3], ['dates', 2, 6, 6], ['gold_chestplate', 1, 1, 1], ['gold_helmet', 1, 1, 1], ['iron_sword', 1, 1, 2],
     ['shield', 1, 1, 2], ['salt_lamp', 1, 3, 3], ['ench_book', 1, 1, 4], ['xp_bottle', 2, 5, 4], ['olive_oil', 1, 2, 3], ['sling', 1, 1, 2]] },
+  // dragon's hoard (v2.8)
+  { rolls: [4, 6], enchChance: 0.6, always: [['gold_ingot', 6, 14]], items: [['gold_block', 1, 3, 6], ['diamond', 1, 4, 6], ['golden_apple', 1, 2, 5], ['ench_book', 1, 1, 5], ['xp_bottle', 3, 8, 5],
+    ['firework', 4, 12, 4], ['raw_meat', 3, 8, 4], ['bone', 3, 8, 4], ['diamond_sword', 1, 1, 1], ['diamond_chestplate', 1, 1, 1], ['crystal_block', 1, 3, 3], ['obsidian', 2, 6, 3]] },
 ];
 function fillLoot(arr, id, rnd) {
   const t = LOOT[id];
@@ -4598,7 +4744,7 @@ class Structures {
     for (let k = 0; k < T.tries; k++) {
       const x = rx * T.region + T.margin + (hash2(rx + k * 977, rz, seed ^ 0x9e37) % span);
       const z = rz * T.region + T.margin + (hash2(rz, rx + k * 977, seed ^ 0x7f4a) % span);
-      if (this.exclude.some((e) => Math.hypot(x - e.x, z - e.z) < e.r) || !g.fresh20Wide(x, z, T.radius + 16)) continue;
+      if (this.exclude.some((e) => Math.hypot(x - e.x, z - e.z) < e.r) || !(T.v22 ? g.fresh22Wide(x, z, T.radius + 16) : g.fresh20Wide(x, z, T.radius + 16))) continue;
       const o = g.column(x, z, {});
       const ring = (r, test) => { for (let j = 0; j < 8; j++) { const a = j / 8 * Math.PI * 2, c = g.column(Math.round(x + Math.cos(a) * r), Math.round(z + Math.sin(a) * r), {}); if (!test(c)) return false; } return true; };
       if (type === 'sunken') {   // on the floor of a deep, open sea
@@ -4609,6 +4755,10 @@ class Structures {
         if (o.biome !== BIOME.FOREST || o.h < SEA_LEVEL + 3 || o.h > 92) continue;
         if (!ring(11, (c) => c.h >= SEA_LEVEL + 1 && Math.abs(c.h - o.h) <= 6)) continue;
         if (this.near('village', x, z, 90).some((v) => Math.hypot(v.x - x, v.z - z) < 64) || this.near('tower', x, z, 50).some((v) => Math.hypot(v.x - x, v.z - z) < 36)) continue;
+      } else if (type === 'nest') {   // v2.8: on a peak, high in the mountains
+        if (o.biome !== BIOME.MOUNTAINS || o.h < SEA_LEVEL + 34 || o.h > 108) continue;
+        if (!ring(7, (c) => c.h <= o.h + 3 && c.h >= o.h - 9) || !ring(4, (c) => c.h >= o.h - 5)) continue;
+        if (this.near('shrine', x, z, 60).some((t) => Math.hypot(t.x - x, t.z - z) < 40)) continue;
       } else {   // the salt fortress: on the dry salt flats
         if (o.biome !== BIOME.SALT || o.h < SEA_LEVEL + 1 || o.h > SEA_LEVEL + 4) continue;
         if (!ring(12, (c) => c.h >= SEA_LEVEL + 1 && Math.abs(c.h - o.h) <= 3) || !ring(6, (c) => c.biome === BIOME.SALT)) continue;
@@ -4659,6 +4809,7 @@ class Structures {
     else if (inst.type === 'sunken') buildSunken(p, inst);
     else if (inst.type === 'grove') buildGrove(p, inst);
     else if (inst.type === 'saltfort') buildSaltFort(p, inst);
+    else if (inst.type === 'nest') buildNest(p, inst);
     else buildTower(p, inst);
     p.finish();
     if (this.plans.size > 48) this.plans.delete(this.plans.keys().next().value);
@@ -4981,6 +5132,38 @@ function buildSaltFort(p, s) {
   P(0, -5, 7, B.gold_block);
 }
 
+// ---- v2.8 dragon's nest: a scorched ledge on a mountain peak, a ring of rocks, a bowl of branches and straw —
+//      and in it, one or two eggs and the dragon's hoard. Its mother is never far ----
+function buildNest(p, s) {
+  const r = p.rnd, cx = s.x, cz = s.z, y0 = s.y, f = Math.floor(r() * 4);
+  const P = (lx, ly, lz, b, meta) => { const [dx, dz] = ROT(f, lx, lz); p.set(cx + dx, y0 + ly, cz + dz, b, meta); };
+  const dirOf = (dlx, dlz) => { const [dx, dz] = ROT(f, dlx, dlz); return dirIndex(dx, dz); };
+  for (let lz = -9; lz <= 9; lz++) for (let lx = -9; lx <= 9; lx++) {
+    const d = Math.hypot(lx, lz);
+    if (d > 8.6) continue;
+    const [dx, dz] = ROT(f, lx, lz);
+    for (let ly = 1; ly <= 12; ly++) P(lx, ly, lz, 0);
+    p.foundation(cx + dx, y0, cz + dz, B.stone);
+    P(lx, 0, lz, d <= 3.4 ? B.hay_bale : (d < 6.6 ? (r() < 0.55 ? B.basalt : B.gravel) : (r() < 0.5 ? B.stone : B.basalt)));
+  }
+  // a ring of rough rocks, some of them black glass
+  for (let k = 0; k < 28; k++) {
+    const a = k / 28 * Math.PI * 2, rr = 7.2 + r() * 0.9, lx = Math.round(Math.cos(a) * rr), lz = Math.round(Math.sin(a) * rr), h = 1 + Math.floor(r() * 3);
+    for (let ly = 1; ly <= h; ly++) P(lx, ly, lz, r() < 0.3 ? B.obsidian : B.basalt);
+  }
+  // the nest: a bowl of branches and straw
+  for (let lz = -5; lz <= 5; lz++) for (let lx = -5; lx <= 5; lx++) {
+    const d = Math.hypot(lx, lz);
+    if (d > 3.4 && d <= 4.6) { P(lx, 1, lz, r() < 0.5 ? B.pine_log : B.oak_log); if (r() < 0.55) P(lx, 2, lz, r() < 0.5 ? B.hay_bale : B.pine_log); }
+  }
+  P(0, 1, 0, B.dragon_egg_b);
+  if (r() < 0.45) P(1, 1, -1, B.dragon_egg_b);
+  P(-2, 1, 2, B.chest, dirOf(1, -1) | (13 << 2));
+  P(2, 1, 2, B.gold_block); if (r() < 0.6) P(-2, 1, -1, B.gold_block);
+  // scorch marks and a little pool of fire on the ledge
+  for (let k = 0; k < 2; k++) { const a = r() * Math.PI * 2, lx = Math.round(Math.cos(a) * 5.6), lz = Math.round(Math.sin(a) * 5.6); P(lx, 0, lz, B.lava); P(lx, -1, lz, B.basalt); }
+}
+
 // ---- v1.7 shipwreck: an old wooden ship on the sea floor near a coast, or washed up on a beach ----
 function buildWreck(p, s) {
   const r = p.rnd, cx = s.x, cz = s.z, y0 = s.y, f = Math.floor(r() * 4), L = 7;
@@ -5199,6 +5382,7 @@ function buildVillage(p, s) {
     const [ox, oz] = ROT(f, 0, D + 2);
     doors.push([hx + ox, hz + oz]);
   }
+  p.doors = doors;
   // gravel paths from each door to the plaza
   for (const [sx, sz] of doors) {
     let x = sx, z = sz;
@@ -7398,7 +7582,7 @@ class Renderer {
     const env = this.computeEnvironment(game);
     const underwater = game.cameraUnderwater;
     // matrices (camera-relative)
-    const fov = (game.player && game.player.scoping ? 16 : S.fov + (game.player && game.player.gliding ? Math.min(16, game.player.glideSpeed * 0.5) : 0) + (game.player && game.player.sprinting ? 6 : 0) + (game.player && game.player.effects.speed ? 4 : 0) + (game.player && game.player.highK ? Math.sin((game.highClock || 0) * 0.8) * 5 * game.player.highK : 0)) * Math.PI / 180;
+    const fov = (game.player && game.player.scoping ? 16 : S.fov + (game.player && game.player.gliding ? Math.min(16, game.player.glideSpeed * 0.5) : 0) + (game.player && game.player.sprinting ? 6 : 0) + (game.player && game.player.effects.speed ? 4 : 0) + (game.player && game.player.highK ? Math.sin((game.highClock || 0) * 0.8) * 5 * game.player.highK : 0) + (game.player && game.player.tripK ? Math.sin((game.tripClock || 0) * 1.3) * 13 * game.player.tripK : 0)) * Math.PI / 180;
     this.curFov = lerp(this.curFov || fov, fov, Math.min(1, dt * 8));
     M4.perspective(this.proj, this.curFov, cw / ch, 0.06, S.renderDistance * 16 + 64);
     M4.viewRotation(this.view, cam.yaw, cam.pitch);
@@ -7671,8 +7855,8 @@ class Renderer {
       if (e.kind === 'item') { this.drawItemEntity(p, e, dx, dy, dz, light); continue; }
       if (e.kind === 'xp') { this.drawXpOrb(p, e, dx, dy, dz); continue; }
       const parts = e.model();
-      const tint = e.hurtTime > 0 ? [0.9, 0.12, 0.08, 0.45] : (e.flash ? [1, 1, 1, 0.55] : (e.fireT > 0 ? [1, 0.45, 0.08, 0.28] : [0, 0, 0, 0]));
-      const alpha = e.dead ? (e.fadeAlpha ? e.fadeAlpha() : Math.max(0, 1 - e.deathTime / 0.9)) : 1;
+      const tint = e.tint ? e.tint : e.hurtTime > 0 ? [0.9, 0.12, 0.08, 0.45] : (e.flash ? [1, 1, 1, 0.55] : (e.fireT > 0 ? [1, 0.45, 0.08, 0.28] : [0, 0, 0, 0]));
+      const alpha = e.dead ? (e.fadeAlpha ? e.fadeAlpha() : Math.max(0, 1 - e.deathTime / 0.9)) : (e.alpha !== undefined ? e.alpha : 1);
       gl.uniform1f(p.u.u_alpha, alpha);
       if (alpha < 1) { gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); }
       for (const part of parts) {
@@ -9722,7 +9906,7 @@ class Butterfly extends Entity {
 const TRADE_BUY = [['wheat', 12], ['hide', 5], ['raw_fish', 8], ['string', 8], ['olives', 10], ['dates', 10], ['wool', 4], ['bone', 10], ['chickpeas', 10], ['coal', 14], ['feather', 8], ['watermelon_slice', 10]];
 const TRADE_SELL = [['watermelon_seeds', 3, 2], ['olive_oil', 2, 3], ['honey_jar', 1, 3], ['glass', 8, 2], ['ceramic_tile', 8, 3], ['map', 1, 4], ['mint_tea', 2, 2], ['pebble', 16, 1],
   ['sapling', 4, 2], ['blue_dye', 6, 3], ['diamond', 1, 9], ['book', 3, 3], ['lantern', 2, 3], ['tnt', 3, 5], ['golden_apple', 1, 6], ['shears', 1, 3], ['cheese', 4, 2],
-  ['falafel', 6, 3], ['spyglass', 1, 5], ['iris', 4, 2], ['chickpeas', 6, 2]];
+  ['falafel', 6, 3], ['spyglass', 1, 5], ['iris', 4, 2], ['chickpeas', 6, 2], ['dragon_egg', 1, 20]];
 function makeOffers() {
   const pick = (arr, n) => { const a = arr.slice(), out = []; while (out.length < n && a.length) out.push(a.splice((Math.random() * a.length) | 0, 1)[0]); return out; };
   const offers = [];
@@ -9783,6 +9967,568 @@ class Merchant extends Mob {
     ];
   }
 }
+// ============================================================================
+//  v2.7 — villagers. Every village has a few, each with a trade. They trade in gold, restock every morning,
+//  and the more you trade with one, the higher their level — and every level opens better offers.
+//  An offer: [level, what they want, how many, what they give, how many, how often a day, extra]
+//  (extra 'ench'/'ench3': the item comes enchanted; 'book'/'book3': an enchanted book, priced by its spell)
+// ============================================================================
+const VL_PROF = {
+  farmer: { name: 'חקלאי', fname: 'חקלאית', hat: 'tembel', offers: [
+    [1, 'wheat', 16, 'gold_ingot', 1, 8], [1, 'chickpeas', 14, 'gold_ingot', 1, 8], [1, 'gold_ingot', 1, 'pita', 4, 8], [1, 'gold_ingot', 1, 'apple', 4, 8],
+    [2, 'watermelon_slice', 12, 'gold_ingot', 1, 6], [2, 'gold_ingot', 2, 'hummus', 2, 6], [2, 'gold_ingot', 1, 'watermelon_seeds', 3, 6], [2, 'gold_ingot', 3, 'honey_cake', 1, 4],
+    [3, 'gold_ingot', 5, 'golden_apple', 1, 3], [3, 'gold_ingot', 2, 'hay_bale', 3, 6]] },
+  fisher: { name: 'דייג', fname: 'דייגת', hat: 'cap', offers: [
+    [1, 'raw_fish', 10, 'gold_ingot', 1, 8], [1, 'string', 12, 'gold_ingot', 1, 8], [1, 'gold_ingot', 1, 'cooked_fish', 4, 8],
+    [2, 'gold_ingot', 2, 'salted_fish', 4, 6], [2, 'gold_ingot', 2, 'fishing_rod', 1, 3, 'ench'], [2, 'gold_ingot', 3, 'boat', 1, 3],
+    [3, 'gold_ingot', 4, 'spyglass', 1, 2], [3, 'gold_ingot', 6, 'fishing_rod', 1, 2, 'ench3'], [3, 'gold_ingot', 5, 'grapple', 1, 2]] },
+  smith: { name: 'נפח', fname: 'נפחית', hat: 'hair', offers: [
+    [1, 'coal', 15, 'gold_ingot', 1, 8], [1, 'iron_ingot', 5, 'gold_ingot', 1, 8], [1, 'gold_ingot', 3, 'iron_sword', 1, 3, 'ench'], [1, 'gold_ingot', 3, 'iron_pickaxe', 1, 3, 'ench'],
+    [2, 'gold_ingot', 6, 'iron_chestplate', 1, 2, 'ench'], [2, 'gold_ingot', 2, 'shield', 1, 3], [2, 'gold_ingot', 3, 'iron_axe', 1, 3, 'ench'], [2, 'gold_ingot', 4, 'iron_helmet', 1, 2, 'ench'],
+    [3, 'diamond', 1, 'gold_ingot', 4, 6], [3, 'gold_ingot', 10, 'diamond_pickaxe', 1, 1, 'ench3'], [3, 'gold_ingot', 12, 'diamond_sword', 1, 1, 'ench3']] },
+  scribe: { name: 'סופר', fname: 'סופרת', hat: 'hair', glasses: true, offers: [
+    [1, 'paper', 18, 'gold_ingot', 1, 8], [1, 'gold_ingot', 1, 'book', 2, 6], [1, 'gold_ingot', 2, 'map', 1, 4],
+    [2, 'gold_ingot', 0, 'ench_book', 1, 2, 'book'], [2, 'gold_ingot', 2, 'lantern', 2, 4], [2, 'gold_ingot', 3, 'clock', 1, 2],
+    [3, 'gold_ingot', 4, 'xp_bottle', 4, 4], [3, 'gold_ingot', 0, 'ench_book', 1, 2, 'book3'], [3, 'gold_ingot', 4, 'detector', 1, 1]] },
+  shepherd: { name: 'רועה', fname: 'רועה', hat: 'keffiyeh', offers: [
+    [1, 'wool', 12, 'gold_ingot', 1, 8], [1, 'hide', 8, 'gold_ingot', 1, 8], [1, 'gold_ingot', 1, 'cheese', 3, 8],
+    [2, 'gold_ingot', 2, 'shears', 1, 3], [2, 'gold_ingot', 1, 'red_carpet', 4, 6], [2, 'gold_ingot', 1, 'blue_wool', 4, 6], [2, 'gold_ingot', 2, 'milk_bucket', 1, 4],
+    [3, 'gold_ingot', 3, 'flute', 1, 2], [3, 'gold_ingot', 3, 'mattress', 1, 3], [3, 'gold_ingot', 3, 'leather_chestplate', 1, 2, 'ench3']] },
+  herbalist: { name: 'רוקח', fname: 'רוקחת', hat: 'scarf', offers: [
+    [1, 'mint', 8, 'gold_ingot', 1, 8], [1, 'sage', 6, 'gold_ingot', 1, 8], [1, 'zaatar', 6, 'gold_ingot', 1, 8], [1, 'gold_ingot', 1, 'mint_tea', 2, 8],
+    [2, 'gold_ingot', 2, 'sage_tea', 2, 6], [2, 'gold_ingot', 3, 'trip_shroom', 2, 4], [2, 'honey_jar', 2, 'gold_ingot', 1, 6], [2, 'gold_ingot', 2, 'zaatar_pita', 3, 6],
+    [3, 'gold_ingot', 5, 'golden_apple', 1, 3], [3, 'gold_ingot', 3, 'xp_bottle', 3, 4], [3, 'iris', 6, 'gold_ingot', 1, 6]] },
+  mason: { name: 'בנאי', fname: 'בנאית', hat: 'capo', offers: [
+    [1, 'clay', 10, 'gold_ingot', 1, 8], [1, 'stone', 24, 'gold_ingot', 1, 8], [1, 'gold_ingot', 1, 'ceramic_tile', 8, 8], [1, 'gold_ingot', 1, 'glass', 6, 8],
+    [2, 'gold_ingot', 1, 'jerusalem_bricks', 16, 6], [2, 'gold_ingot', 2, 'mosaic', 8, 6], [2, 'gold_ingot', 2, 'salt_lamp', 2, 6], [2, 'gold_ingot', 1, 'stone_bricks', 16, 6],
+    [3, 'gold_ingot', 3, 'lamp', 4, 4], [3, 'gold_ingot', 3, 'blue_terracotta', 16, 4], [3, 'gold_ingot', 4, 'oil_lamp', 6, 4]] },
+};
+const VL_KEYS = Object.keys(VL_PROF);
+const VL_NAMES_M = ['יוסי', 'דוד', 'אבי', 'משה', 'עמוס', 'אהרון', 'סלים', 'ג׳מיל', 'שמעון', 'איתן', 'בועז', 'נסים'];
+const VL_NAMES_F = ['רחל', 'מרים', 'נועה', 'תמר', 'שירה', 'יעל', 'לילה', 'חנה', 'אסתר', 'דינה', 'סמירה', 'אורית'];
+const VL_STEPS = [0, 0, 5, 15];   // trades it takes to reach each level
+const vlLevel = (t) => (t >= VL_STEPS[3] ? 3 : (t >= VL_STEPS[2] ? 2 : 1));
+class Villager extends Mob {
+  constructor(game, x, y, z, info) {
+    super(game, x, y, z);
+    Object.assign(this, info);
+    const P = VL_PROF[this.prof];
+    this.type = 'villager'; this.name = this.person + ' ה' + (this.female ? P.fname : P.name);
+    this.hw = 0.3; this.h = 1.85; this.health = this.maxHealth = 20; this.nodT = 0;
+    this.face0 = 'vl_face_' + (this.female ? 'f' : 'm') + (P.glasses ? 'g' : '');
+    this.offers = [];
+  }
+  drops() { return []; }
+  rec() { const m = this.game.meta; if (!m.villagers) m.villagers = {}; const k = this.village + '#' + this.idx; return m.villagers[k] || (m.villagers[k] = { t: 0, d: 0, u: [] }); }
+  get level() { return vlLevel(this.rec().t); }
+  // a new day, new stock — and the day's enchantments
+  refreshOffers() {
+    const g = this.game, r = this.rec();
+    if (r.d !== g.day) { r.d = g.day; r.u = []; }
+    const rnd = mulberry32((this.seed ^ Math.imul(g.day, 0x9e3779b1)) >>> 0);
+    this.offers = VL_PROF[this.prof].offers.map((o, i) => {
+      const [tier, gk, gn, rk, rn, max, extra] = o, off = { i, tier, give: [[I[gk], gn]], get: [I[rk], rn], left: max - (r.u[i] || 0) };
+      if (extra === 'book' || extra === 'book3') {
+        let b = randomBook(rnd);
+        if (extra === 'book3') for (let k = 0; k < 2; k++) { const c = randomBook(rnd), lc = Object.values(c.ench)[0], lb = Object.values(b.ench)[0]; if (lc > lb) b = c; }
+        const k = Object.keys(b.ench)[0], lv = b.ench[k];
+        off.ench = b.ench; off.give = [[I.gold_ingot, Math.min(18, 2 + lv * 3 + (ENCH[k].treasure ? 5 : 0))]];
+      } else if (extra) {
+        const st = enchantStack(makeStack(I[rk], 1), extra === 'ench3' ? 20 + Math.floor(rnd() * 11) : 6 + Math.floor(rnd() * 10), rnd, false);
+        if (st.ench) off.ench = st.ench;
+      }
+      return off;
+    });
+  }
+  onHurt(sx, sz) {
+    this.panic = 4; this.panicFrom = [sx, sz];
+    if (this.game.playerStrike && !this.dead) this.game.ui.toast(this.name + ' נבהל' + (this.female ? 'ה' : '') + '!', 1.6);
+  }
+  die() { super.die(); const r = this.rec(); r.dead = this.game.day; }   // a newcomer moves in the next day
+  think(dt) {
+    const g = this.game, p = g.player;
+    this.face = null;
+    if (this.nodT > 0) this.nodT -= dt;
+    if (this.panic > 0) {
+      this.panic -= dt;
+      const dx = this.x - this.panicFrom[0], dz = this.z - this.panicFrom[1], d = Math.hypot(dx, dz) || 1;
+      this.wantX = dx / d; this.wantZ = dz / d; this.speed = 3.4;
+      if (!this.safeAhead(3)) { const t = this.wantX; this.wantX = -this.wantZ; this.wantZ = t; }
+      return;
+    }
+    if (g.ui.tradeWith === this || (p && !p.dead && this.distTo(p.x, p.y, p.z) < 4.5)) { this.wantX = this.wantZ = 0; this.face = [p.x, p.z]; return; }   // stops to look at you
+    // by day they potter about the village; at night (and when it pours) they wait by their own doors
+    if (g.daylight < 0.3 || g.weather.rain > 0.6) {
+      const hx = this.home[0] + 0.5, hz = this.home[1] + 0.5;
+      if (Math.hypot(this.x - hx, this.z - hz) > 0.9) this.steerTo(hx, hz, 1.3);
+      else { this.wantX = this.wantZ = 0; this.face = this.plaza; }
+      return;
+    }
+    if (Math.hypot(this.x - this.plaza[0], this.z - this.plaza[1]) > 20) this.steerTo(this.plaza[0], this.plaza[1], 1.2);
+    else this.wander(dt, 1.0);
+  }
+  model() {
+    const P = VL_PROF[this.prof], r = L('vl_robe_' + this.prof), sk = L('skin'), f = L(this.face0), hr = L('vl_hair'), R = _6(r), CL = L('clear');
+    const sw = Math.sin(this.walkPhase) * 0.5 * this.walkAmt, nod = this.nodT > 0 ? Math.sin(this.nodT * 14) * 0.18 : 0;
+    const H = (ox, oy, oz, sx, sy, sz, layers) => _P(0, 1.52, 0, ox, oy, oz, sx, sy, sz, layers, nod);
+    const parts = [
+      _P(0, 0.4, 0, 0, 0, 0, 0.5, 0.8, 0.32, R),
+      _P(0, 0.8, 0, 0, 0.36, 0, 0.5, 0.72, 0.28, R),
+      H(0, 0.2, 0, 0.42, 0.42, 0.42, [sk, sk, hr, sk, hr, f]),
+      _P(0.33, 1.44, 0, 0, -0.3, 0, 0.16, 0.66, 0.2, [r, r, r, sk, r, r], sw),
+      _P(-0.33, 1.44, 0, 0, -0.3, 0, 0.16, 0.66, 0.2, [r, r, r, sk, r, r], -sw),
+    ];
+    const hat = P.hat;
+    if (hat === 'tembel') { const t = _6(L('vl_tembel')); parts.push(H(0, 0.45, 0, 0.44, 0.12, 0.44, t), H(0, 0.38, 0, 0.56, 0.04, 0.56, t)); }
+    else if (hat === 'cap' || hat === 'capo') { const t = _6(L(hat === 'cap' ? 'vl_cap' : 'vl_capo')); parts.push(H(0, 0.44, 0, 0.44, 0.1, 0.44, t), H(0, 0.38, -0.27, 0.36, 0.03, 0.16, t)); }
+    else if (hat === 'hair') parts.push(H(0, 0.43, 0.02, 0.44, 0.05, 0.44, _6(hr)), H(0, 0.27, 0.215, 0.44, 0.3, 0.02, _6(hr)));
+    else {   // a keffiyeh with its black band, or a headscarf
+      const c = L(hat === 'keffiyeh' ? 'vl_keffiyeh' : 'vl_scarf');
+      parts.push(H(0, 0.22, 0.02, 0.47, 0.47, 0.45, [c, c, c, CL, c, CL]), H(0, 0.04, 0.25, 0.44, 0.46, 0.05, _6(c)));
+      if (hat === 'keffiyeh') parts.push(H(0, 0.4, 0.02, 0.49, 0.05, 0.47, [L('coal_block'), L('coal_block'), CL, CL, L('coal_block'), L('coal_block')]));
+    }
+    if (this.female && hat !== 'scarf' && hat !== 'keffiyeh') parts.push(H(0, 0.06, 0.23, 0.44, 0.5, 0.04, _6(hr)));   // long hair down the back
+    return parts;
+  }
+}
+MOB_TYPES.villager = Villager; MOB_XP.villager = 0;
+
+// v2.7: what a hallucination shows you — creatures that aren't there, things that float, colours that don't exist.
+// Nothing touches them and they touch nothing
+const ILLUSION_MOBS = ['chicken', 'gazelle', 'camel', 'sheep', 'cow', 'horse', 'bear', 'dolphin', 'fish', 'hoopoe', 'turtle', 'hedgehog', 'jackal', 'scorpion', 'viper', 'shark', 'pichon', 'archer', 'spider', 'ibex', 'bee', 'bat', 'dog'];
+const ILLUSION_BLOCKS = ['watermelon', 'tnt', 'diamond_ore', 'gold_block', 'crystal_block', 'beehive', 'mosaic', 'salt_lamp', 'oak_leaves', 'chest', 'lamp', 'ceramic_tile'];
+const TRIP_LINES = ['הצבעים נשמעים טעים…', 'למה העצים מסתכלים עליי?', 'הגמל ההוא יודע משהו', 'הרגליים שלי עשויות מפלאפל?', 'השמיים מתקפלים לאט', 'אני שומע את הדשא גדל',
+  'הדג אמר לי שלום', 'הכל נושם…', 'רגע… מי אני?', 'הבלוקים מדברים בינם לבין עצמם', 'היה לי רעיון גאוני. שכחתי אותו.', 'העננים עושים לי פרצופים', 'אולי אני בעצם תרנגולת?',
+  'הזמן נמס כמו גבינה', 'כמה ידיים יש לי?', 'הפרה מרחפת. זה בסדר. זה בסדר.', 'אני רואה את הקול שלי', 'כולם מסתכלים עליי…'];
+function hsvRgb(h, s, v) {
+  const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+  return [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][((i % 6) + 6) % 6];
+}
+class Illusion extends Entity {
+  constructor(game, mode, what) {
+    super(game, 0, 0, 0);
+    this.kind = 'illusion'; this.bright = true; this.mode = mode; this.life = 5 + Math.random() * 6;
+    this.hue = Math.random(); this.spin = (Math.random() < 0.5 ? -1 : 1) * (1 + Math.random() * 3); this.scale = 1;
+    if (typeof what === 'number') { this.block = what; this.h = 1; }
+    else { this.inner = new MOB_TYPES[what](game, 0, 0, 0); this.inner.walkAmt = 1; this.h = this.inner.h; }
+  }
+  // where it shows up: mostly in front of you, so you see it
+  setup(p, i, n) {
+    const yaw = p.yaw + (Math.random() - 0.5) * 1.6, fx = -Math.sin(yaw), fz = -Math.cos(yaw), m = this.mode;
+    const at = (d, dy) => { this.x = p.x + fx * d; this.z = p.z + fz * d; this.y = p.y + (dy || 0); };
+    if (m === 'orbit' || m === 'swarm') {
+      this.r = m === 'swarm' ? 2 + Math.random() * 1.5 : 4 + Math.random() * 5; this.ang = Math.atan2(fz, fx) + i / n * Math.PI * 2; this.w = (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random());
+      this.dy = m === 'swarm' ? 1 + Math.random() * 1.5 : Math.random() * 3; if (m === 'swarm') this.scale = 0.25 + Math.random() * 0.2;
+      if (Math.random() < 0.3) { this.lie = 2; this.dy += 2.4; }   // upside down, walking on air
+    } else if (m === 'charge') { at(14 + Math.random() * 4, 0); this.scale = 1 + Math.random() * 1.5; }
+    else if (m === 'giant') { at(16 + Math.random() * 6, -0.5); this.scale = 4 + Math.random() * 4; this.life += 3; }
+    else if (m === 'float') { at(4 + Math.random() * 4, 0.5); this.scale = this.block ? 0.6 + Math.random() : 0.8 + Math.random() * 1.4; }
+    else if (m === 'rain') { at(2 + Math.random() * 7, 12 + Math.random() * 6); this.x += (Math.random() - 0.5) * 8; this.z += (Math.random() - 0.5) * 8; this.vy = -Math.random() * 3; this.scale = this.block ? 0.5 : 0.6 + Math.random() * 0.6; }
+    else { at(3.5 + Math.random(), 0); this.scale = 0.7 + Math.random() * 0.9; this.baseY = this.y; }   // dance
+    this.h = (this.inner ? this.inner.h : 1) * this.scale;
+    this.yaw = Math.atan2(-(p.x - this.x), -(p.z - this.z));
+  }
+  update(dt) {
+    const g = this.game, p = g.player;
+    this.age += dt;
+    if (!p || p.dead || !(p.effects.trip > 0)) this.life = Math.min(this.life, this.age + 0.4);   // it fades as the mind clears
+    if (this.age > this.life) { this.remove = true; return; }
+    this.alpha = 0.9 * clamp(Math.min(this.age / 0.7, (this.life - this.age) / 0.7), 0, 1);
+    this.hue = (this.hue + dt * 0.3) % 1;
+    const c = hsvRgb(this.hue, 0.9, 1); this.tint = [c[0], c[1], c[2], 0.42];
+    const m = this.mode, face = () => { this.yaw = Math.atan2(-(p.x - this.x), -(p.z - this.z)); };
+    if (m === 'orbit' || m === 'swarm') {
+      this.ang += this.w * dt;
+      this.x = p.x + Math.cos(this.ang) * this.r; this.z = p.z + Math.sin(this.ang) * this.r; this.y = p.y + this.dy + Math.sin(this.age * 2) * 0.3;
+      this.yaw = Math.atan2(Math.sin(this.ang) * this.w, -Math.cos(this.ang) * this.w);
+    } else if (m === 'charge') {
+      const dx = p.x - this.x, dz = p.z - this.z, d = Math.hypot(dx, dz) || 1;
+      if (d < 1.3) { g.poof(this.x, this.y + 1, this.z); this.remove = true; return; }
+      this.x += dx / d * 7 * dt; this.z += dz / d * 7 * dt; this.y += (p.y - this.y) * Math.min(1, dt * 3); face();
+    } else if (m === 'giant') { face(); this.x += Math.cos(this.age * 0.3) * dt * 0.8; }
+    else if (m === 'float') { this.y += dt * 0.5; this.yaw += this.spin * dt; }
+    else if (m === 'rain') {
+      this.vy -= 14 * dt; this.y += this.vy * dt; this.yaw += this.spin * dt;
+      if (this.y < p.y - 1.5) { g.poof(this.x, this.y + 0.5, this.z); this.remove = true; return; }
+    } else { this.y = this.baseY + Math.abs(Math.sin(this.age * 4)) * 1.1; this.yaw += this.spin * dt * 1.5; }
+    const n = this.inner;
+    if (n) { n.x = this.x; n.y = this.y; n.z = this.z; n.age += dt; n.walkPhase += dt * (m === 'charge' ? 10 : 5); n.flap = (n.flap || 0) + dt * 22; n.swim = (n.swim || 0) + dt * 8; n.slither = (n.slither || 0) + dt * 5; }
+  }
+  model() {
+    if (this.inner) return this.inner.model();
+    const l = blockLayers(this.block);
+    return [_P(0, 0.5, 0, 0, 0, 0, 1, 1, 1, l, this.age * 1.3, 0, this.age * 0.7)];
+  }
+}
+
+// ============================================================================
+//  v2.8 — dragons. An egg (from a nest high in the mountains, a sky tower or a merchant) hatches beside a fire;
+//  the hatchling follows you and guards you, grows as time passes and as you feed it — and grown, it carries
+//  you through the sky and breathes fire. Every nest has a mother, and she does not give up her eggs gladly
+// ============================================================================
+const DRAGON_GROW = 900;   // seconds from hatchling to grown (food hurries it along)
+const HATCH_TIME = 100;    // seconds of warmth an egg needs
+const DRAGON_FOOD = { raw_meat: 60, cooked_meat: 90, raw_chicken: 50, cooked_chicken: 70, raw_fish: 40, cooked_fish: 60, salted_fish: 60, golden_apple: 300 };
+const WARM_BLOCKS = new Set([B.campfire, B.lava, B.furnace, B.oil_lamp]);
+// the egg, set down in the world: it hatches once it has been warm long enough
+class DragonEgg extends Mob {
+  constructor(game, x, y, z) {
+    super(game, x, y, z);
+    this.type = 'dragon_egg'; this.name = 'ביצת דרקון';
+    this.hw = 0.28; this.h = 0.55; this.health = this.maxHealth = 40;
+    this.tamed = true; this.sitting = true; this.fireproof = true; this.warm = 0; this.isWarm = false; this.checkT = 0;
+  }
+  get persist() { return true; }
+  record() { return { type: 'egg', x: this.x, y: this.y, z: this.z, warm: this.warm, sitting: true }; }
+  // a knock picks it back up
+  damage() {
+    if (this.dead || this.remove || !this.game.playerStrike) return false;
+    this.remove = true; this.game.spawnItem(this.x, this.y + 0.3, this.z, I.dragon_egg, 1); this.game.poof(this.x, this.y + 0.3, this.z);
+    return true;
+  }
+  onUnload() { if (!this.remove) { this.game.petsAway.push(this.record()); this.remove = true; } }
+  update(dt) {
+    if (this.remove) return;
+    const p = this.game.player;
+    if (!this.world.isLoaded(Math.floor(this.x), Math.floor(this.z)) || Math.hypot(p.x - this.x, p.z - this.z) > 100) { this.onUnload(); return; }
+    super.update(dt);
+  }
+  nearWarmth() {
+    const w = this.world, x0 = Math.floor(this.x), y0 = Math.floor(this.y), z0 = Math.floor(this.z);
+    for (let dy = -1; dy <= 1; dy++) for (let dz = -2; dz <= 2; dz++) for (let dx = -2; dx <= 2; dx++) if (WARM_BLOCKS.has(w.getBlock(x0 + dx, y0 + dy, z0 + dz))) return true;
+    return false;
+  }
+  think(dt) {
+    const g = this.game;
+    this.wantX = this.wantZ = 0;
+    this.checkT -= dt;
+    if (this.checkT <= 0) { this.checkT = 1; this.isWarm = this.nearWarmth(); }
+    if (!this.isWarm) return;
+    this.warm += dt;
+    if (Math.random() < dt * (1 + this.warm / 25)) g.particle({ x: this.x + (Math.random() - 0.5) * 0.4, y: this.y + 0.2 + Math.random() * 0.4, z: this.z + (Math.random() - 0.5) * 0.4, vx: 0, vy: 0.5, vz: 0, g: -0.3, collide: false, life: 0.8, size: 0.04, layer: Tex.id('spark_y'), u: 0, v: 0, us: 0.5, bright: true });
+    if (this.warm > HATCH_TIME * 0.7 && Math.random() < dt * 0.6) g.audio.eggCrack(this, 0.4);
+    if (this.warm >= HATCH_TIME) this.hatch();
+  }
+  hatch() {
+    const g = this.game;
+    this.remove = true;
+    const d = new Dragon(g, this.x, this.y + 0.1, this.z, { color: Math.floor(Math.random() * DRAGON_COLORS.length), grow: 0 });
+    g.addEntity(d);
+    g.poof(this.x, this.y + 0.3, this.z); g.hearts(d, 8); g.audio.eggCrack(this, 1); g.audio.mobCall(d);
+    g.ui.showTitle('בקע דרקון!', 'הוא ' + DRAGON_COLORS[d.color][0] + ' — האכילו אותו בשר או דגים, והוא יגדל מהר יותר');
+    g.achieve('hatch');
+  }
+  model() {
+    const e = L('dr_egg'), E6 = _6(e), k = Math.min(1, this.warm / HATCH_TIME), wob = this.isWarm ? Math.sin(this.age * (6 + k * 14)) * (0.04 + k * 0.16) : 0;
+    return [_P(0, 0, 0, 0, 0.06, 0, 0.3, 0.12, 0.3, E6, 0, 0, wob), _P(0, 0, 0, 0, 0.28, 0, 0.38, 0.36, 0.38, E6, 0, 0, wob), _P(0, 0, 0, 0, 0.5, 0, 0.28, 0.16, 0.28, E6, 0, 0, wob)];
+  }
+}
+// a dragon — yours (tamed), or a nest's mother (wild)
+class Dragon extends Mob {
+  constructor(game, x, y, z, info) {
+    super(game, x, y, z);
+    this.type = 'dragon'; this.color = 0; this.grow = DRAGON_GROW; this.wild = false;
+    Object.assign(this, info || {});
+    this.name = this.wild ? 'הדרקונית שומרת הקן' : 'דרקון ' + DRAGON_COLORS[this.color][0];
+    this.tamed = !this.wild; this.sitting = false; this.fireproof = true;
+    this.health = this.maxHealth = this.wild ? 150 : 60;
+    this.flapPh = Math.random() * 6; this.flyK = 0; this.breath = 0; this.fireCd = 1; this.regenT = 0; this.foe = null; this.biteCd = 0;
+    this.circleA = Math.random() * Math.PI * 2; this.mode = 'circle'; this.modeT = 4; this.subdued = 0; this.flapSoundT = 0;
+    if (this.wild) { this.flying = true; this.boss = true; }
+    this.resize();
+  }
+  get grown() { return this.wild || this.grow >= DRAGON_GROW; }
+  resize() {
+    const s = this.wild ? 1.45 : 0.35 + 0.65 * Math.min(1, this.grow / DRAGON_GROW);
+    this.scale = s; this.hw = 0.62 * s; this.h = 1.6 * s; this.seatY = 1.3 * s; this.stepUp = 0.6;
+  }
+  get persist() { return this.tamed; }
+  record() { return { type: 'dragon', x: this.x, y: this.y, z: this.z, health: this.health, sitting: this.sitting, color: this.color, grow: this.grow }; }
+  drops() { return []; }
+  // your own dragon shrugs off your blows (and the ground); the wild one is beaten, never killed
+  damage(amount, sx, sz, knock, cause) {
+    if (this.tamed && (this.game.playerStrike || cause === 'fall')) return false;
+    if (this.subdued > 0) return false;
+    return super.damage(amount, sx, sz, this.wild ? 0 : knock, cause);
+  }
+  onHurt() { if (this.tamed) this.sitting = false; }
+  die() {
+    if (!this.wild) { super.die(); this.game.ui.toast('הדרקון שלך מת', 3.5); return; }
+    // the mother yields: she bows her head, leaves you her gifts, and flies off for good
+    const g = this.game;
+    this.dead = false; this.health = 1; this.subdued = 7; this.flying = true;
+    g.ui.showTitle('הדרקונית נכנעה', 'היא משאירה לכם מתנות ועפה אל ההרים');
+    for (const [k, n] of [['diamond', 3], ['golden_apple', 2], ['gold_ingot', 10], ['xp_bottle', 6]]) g.spawnItem(this.x, this.y + 0.5, this.z, I[k], n);
+    g.dropXp(this.x, this.y + 0.5, this.z, 60); g.hearts(this, 12); g.audio.dragonRoar(this, 0.6);
+    g.achieve('mother');
+    g.stats.bosses = (g.stats.bosses || 0) + 1;
+  }
+  teleportToOwner() {
+    const g = this.game, p = g.player;
+    const s = g.findSafeSpot(Math.floor(p.x) + Math.floor(Math.random() * 5) - 2, Math.floor(p.z) + Math.floor(Math.random() * 5) - 2);
+    this.x = s.x; this.y = s.y; this.z = s.z; this.vx = this.vy = this.vz = 0; this.foe = null; this.flying = false;
+  }
+  onUnload() {
+    if (this.remove || this.rider) return;
+    if (this.sitting) { this.game.petsAway.push(this.record()); this.remove = true; }
+    else this.teleportToOwner();
+  }
+  update(dt) {
+    if (this.remove) return;
+    const g = this.game, p = g.player;
+    if (this.tamed && !this.dead) {
+      const loaded = this.world.isLoaded(Math.floor(this.x), Math.floor(this.z));
+      if (!loaded && this.rider) { this.vx = this.vy = this.vz = 0; this.age += dt; return; }   // waits for the land ahead to load
+      const far = Math.hypot(p.x - this.x, p.z - this.z);
+      if (!loaded || far > 100) { this.onUnload(); if (this.remove) return; }
+      else if (!this.rider && !this.sitting && !p.dead && !p.riding && (far > 40 || Math.abs(p.y - this.y) > 30)) this.teleportToOwner();
+      this.regenT += dt;
+      if (this.regenT > 4) { this.regenT = 0; if (this.health < this.maxHealth) this.health++; }
+      if (this.grow < DRAGON_GROW) { this.grow += dt; if (this.grow >= DRAGON_GROW) this.grownUp(); this.resize(); }
+    }
+    this.fireCd -= dt; this.biteCd -= dt;
+    if (this.breath > 0) this.breath -= dt;
+    this.flyK = clamp(this.flyK + (this.flying && !this.onGround ? dt * 3 : -dt * 3), 0, 1);
+    this.flapPh += dt * (this.flying ? (this.rider && Math.hypot(this.vx, this.vz) > 10 ? 7 : 9) : 0);
+    if (this.flying && (this.rider || this.wild)) { this.flapSoundT -= dt; if (this.flapSoundT <= 0) { this.flapSoundT = Math.PI * 2 / 9; g.audio.dragonFlap(this); } }
+    super.update(dt);
+    // on its back, the land ahead must be ready before it flies into it
+    if (this.rider && !this.world.isLoaded(Math.floor(this.x + this.vx * 0.4), Math.floor(this.z + this.vz * 0.4))) { this.vx *= 0.2; this.vz *= 0.2; }
+  }
+  grownUp() {
+    const g = this.game;
+    g.hearts(this, 10); g.audio.dragonRoar(this, 0.8);
+    g.ui.showTitle('הדרקון גדל!', 'לחיצה ימנית עליו — ועולים עליו לטוס');
+  }
+  feed(st) {
+    const g = this.game, add = DRAGON_FOOD[ITEMS[st.id].key];
+    this.health = Math.min(this.maxHealth, this.health + 6);
+    g.hearts(this, 4); g.audio.eat();
+    if (this.grow < DRAGON_GROW) {
+      this.grow = Math.min(DRAGON_GROW, this.grow + add);
+      if (this.grow >= DRAGON_GROW) this.grownUp();
+      else g.ui.toast('הדרקון גדל… ' + Math.floor(this.grow / DRAGON_GROW * 100) + '%', 1.6);
+      this.resize();
+    }
+  }
+  mouth() { const s = this.scale, fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw); return [this.x + fx * 2.5 * s, this.y + (1.9 - this.flyK * 0.35) * s, this.z + fz * 2.5 * s]; }
+  breathe(d, owner) {
+    const [mx, my, mz] = this.mouth(), g = this.game;
+    this.breath = 0.35;
+    g.addEntity(new DragonFire(g, mx, my, mz, d[0], d[1], d[2], owner || this, this.wild ? 4 : (this.grown ? 8 : 3)));
+    g.audio.dragonFire(this);
+  }
+  breatheAt(t) {
+    const [mx, my, mz] = this.mouth(), dx = t.x - mx, dy = t.y + (t.h || 1.6) * 0.5 - my, dz = t.z - mz, l = Math.hypot(dx, dy, dz) || 1;
+    this.face = [t.x, t.z]; this.yawTarget = Math.atan2(-dx, -dz);
+    this.breathe([dx / l, dy / l, dz / l]);
+  }
+  // with you on its back: look where to go, forward to fly, jump to climb, sneak to sink (and to land), left button for fire
+  drive(inp, p, dt) {
+    const d = p.lookDir(), sy = Math.sin(p.yaw), cy = Math.cos(p.yaw);
+    if (!this.flying && inp.jump) { this.flying = true; this.vy = 8; this.onGround = false; this.game.audio.dragonFlap(this); }
+    if (this.flying) {
+      let wx = 0, wy = 0, wz = 0;
+      if (inp.moveZ > 0.1) { wx = d[0]; wy = d[1]; wz = d[2]; }
+      else if (inp.moveZ < -0.1) { wx = -d[0] * 0.35; wz = -d[2] * 0.35; }
+      if (inp.moveX) { wx += cy * inp.moveX * 0.6; wz += -sy * inp.moveX * 0.6; }
+      if (inp.jump) wy += 0.75;
+      if (inp.sneak) wy -= 0.85;
+      const l = Math.hypot(wx, wy, wz);
+      if (l > 1) { wx /= l; wy /= l; wz /= l; }
+      this.wantX = wx; this.wantY = wy; this.wantZ = wz; this.speed = inp.sprint ? 24 : 14;
+      this.yawTarget = p.yaw;
+      if (this.onGround && wy <= 0.05 && inp.moveZ <= 0.1) { this.flying = false; this.vy = 0; }   // touched down
+      this.game.achieve('dragonride');
+    } else {
+      let wx = -sy * inp.moveZ + cy * inp.moveX, wz = -cy * inp.moveZ - sy * inp.moveX;
+      const l = Math.hypot(wx, wz);
+      if (l > 1) { wx /= l; wz /= l; }
+      this.wantX = wx; this.wantZ = wz; this.speed = inp.sprint ? 8.5 : 5.5;
+    }
+    if (inp.primary && this.fireCd <= 0) { this.fireCd = 0.5; this.breathe(d, p); }
+  }
+  pickFoe(p) {
+    const g = this.game;
+    if (this.foe && !this.foe.dead && !this.foe.remove && this.distTo(this.foe.x, this.foe.y, this.foe.z) < 22) return;
+    this.foe = null;
+    const t = p.lastTarget;
+    if (t && !t.dead && !t.remove && t !== this && (HOSTILE_TYPES.includes(t.type) || t.type === 'bear') && t.distTo(p.x, p.y, p.z) < 16) { this.foe = t; return; }
+    for (const e of g.entities) {
+      if (e.kind !== 'mob' || e.dead || e === this || e.tamed || e.distTo(p.x, p.y, p.z) > 12) continue;
+      if ((HOSTILE_TYPES.includes(e.type) && e.type !== 'dragon') || (e.type === 'bear' && e.angry > 0)) { this.foe = e; return; }
+    }
+  }
+  think(dt) {
+    if (this.rider) return;
+    if (this.wild) { this.wildThink(dt); return; }
+    const g = this.game, p = g.player;
+    this.face = null;
+    if (this.sitting) { this.flying = false; this.wantX = this.wantZ = 0; this.wantY = 0; return; }
+    if (!p || p.dead) { this.wantX = this.wantZ = 0; return; }
+    // guard: grown, it burns what threatens you from a distance; small, it bites
+    if (!g.peaceful) this.pickFoe(p);
+    if (this.foe) {
+      const f = this.foe, fd = Math.hypot(f.x - this.x, f.z - this.z);
+      this.flying = false;
+      if (this.grown) {
+        if (fd > 9) this.steerTo(f.x, f.z, 5); else { this.wantX = this.wantZ = 0; this.face = [f.x, f.z]; }
+        if (fd < 15 && this.fireCd <= 0 && this.canSee(f)) { this.fireCd = 1.4; this.breatheAt(f); }
+      } else {
+        this.steerTo(f.x, f.z, 4.6); this.face = [f.x, f.z];
+        if (fd < 1.3 + this.hw && Math.abs(f.y - this.y) < 1.5 && this.biteCd <= 0) { this.biteCd = 0.9; this.breath = 0.25; g.playerStrike = PLAYER_SHOT; f.damage(3, this.x, this.z, 0.6); g.playerStrike = null; if (f.dead) g.onKill(f); }
+      }
+      return;
+    }
+    // follow: on foot when you are near and on the ground, on the wing when you are far, high up or flying yourself
+    const d = Math.hypot(p.x - this.x, p.z - this.z), dy = p.y - this.y;
+    const air = d > 10 || dy > 2.6 || p.gliding || (this.flying && !(d < 4 && Math.abs(dy) < 2 && p.onGround));
+    if (air) {
+      this.flying = true;
+      const tx = p.x + Math.sin(p.yaw) * 2.8, tz = p.z + Math.cos(p.yaw) * 2.8, ty = p.y + 2.4;
+      const ddx = tx - this.x, ddy = ty - this.y, ddz = tz - this.z, dd = Math.hypot(ddx, ddy, ddz) || 1;
+      if (dd < 1.2) this.wantX = this.wantY = this.wantZ = 0;
+      else { this.wantX = ddx / dd; this.wantY = ddy / dd; this.wantZ = ddz / dd; this.speed = Math.min(18, 3 + dd * 0.9); }
+      if (Math.hypot(this.wantX, this.wantZ) > 0.05) this.yawTarget = Math.atan2(-this.wantX, -this.wantZ);
+    } else {
+      this.flying = false; this.wantY = 0;
+      if (d > 3.5 + this.hw) this.steerTo(p.x, p.z, d > 7 ? 6 : 3.6);
+      else { this.wantX = this.wantZ = 0; if (d < 3 + this.hw) this.face = [p.x, p.z]; }
+    }
+  }
+  // the mother: circles her nest; anyone who comes near is met with fire, and now and then she dives at them
+  wildThink(dt) {
+    const g = this.game, p = g.player, H = this.home;
+    this.flying = true; this.face = null;
+    if (this.subdued > 0) {
+      this.subdued -= dt;
+      if (this.subdued > 5) { this.wantX = this.wantZ = 0; this.wantY = -0.2; this.speed = 2; this.face = p ? [p.x, p.z] : null; }
+      else { this.wantX = Math.cos(this.circleA); this.wantZ = Math.sin(this.circleA); this.wantY = 0.6; this.speed = 10; this.yawTarget = Math.atan2(-this.wantX, -this.wantZ); }
+      if (this.subdued <= 0) { this.remove = true; g.poof(this.x, this.y + 1, this.z); }
+      return;
+    }
+    const pd = p && !p.dead ? Math.hypot(p.x - H[0], p.z - H[2]) : 999;
+    const angry = !g.peaceful && pd < 50 && p.y > H[1] - 24;
+    this.circleA += dt * 0.42;
+    if (angry && this.mode === 'dive') {
+      this.modeT -= dt;
+      const dx = p.x - this.x, dy = p.y + 0.9 - (this.y + this.h * 0.4), dz = p.z - this.z, d = Math.hypot(dx, dy, dz) || 1;
+      this.wantX = dx / d; this.wantY = dy / d; this.wantZ = dz / d; this.speed = 15;
+      this.yawTarget = Math.atan2(-dx, -dz);
+      if (d < 2.2 + this.hw && this.biteCd <= 0) { this.biteCd = 1.2; this.breath = 0.3; p.hurt(5, this.x, this.z, this); this.mode = 'circle'; this.modeT = 5 + Math.random() * 3; }
+      if (this.modeT <= 0) { this.mode = 'circle'; this.modeT = 5 + Math.random() * 3; }
+      return;
+    }
+    const tx = H[0] + Math.cos(this.circleA) * 11, tz = H[2] + Math.sin(this.circleA) * 11, ty = H[1] + 11 + Math.sin(this.age * 0.7) * 2;
+    const dx = tx - this.x, dy = ty - this.y, dz = tz - this.z, d = Math.hypot(dx, dy, dz) || 1;
+    this.wantX = dx / d; this.wantY = dy / d; this.wantZ = dz / d; this.speed = Math.min(10, 2 + d);
+    this.yawTarget = Math.atan2(-this.wantX, -this.wantZ);
+    if (!angry) return;
+    this.modeT -= dt;
+    if (this.modeT <= 0) { this.mode = 'dive'; this.modeT = 3.2; g.audio.dragonRoar(this, 1); return; }
+    if (this.fireCd <= 0 && this.distTo(p.x, p.y, p.z) < 34 && this.canSee(p)) { this.fireCd = 2 + Math.random() * 0.8; this.breatheAt(p); }
+  }
+  model() {
+    const c = this.color, S = L('dr_scale' + c), Be = L('dr_belly' + c), W = L('dr_wing' + c), F = L('dr_face' + c), E = L('dr_eye' + c), Ho = L('dr_horn');
+    const S6 = _6(S), W6 = _6(W), H6 = _6(Ho), SB = [S, S, S, Be, S, S];
+    const fly = this.flyK, t = this.age, sw = Math.sin(this.walkPhase * 0.8) * 0.6 * this.walkAmt * (1 - fly);
+    const by = 1.05 - fly * 0.15, parts = [_P(0, by, 0, 0, 0, 0, 0.9, 0.75, 1.6, SB)];
+    // the neck curves up to the head (straighter in flight)
+    const up = 0.32 - fly * 0.22;
+    let ny = by + 0.18, nz = -0.72;
+    for (let i = 0; i < 3; i++) { nz -= 0.36; ny += up; const s = 0.44 - i * 0.04; parts.push(_P(0, ny, nz, 0, 0, 0, s, s, 0.42, SB)); }
+    const hy = ny + 0.1, hz = nz - 0.42, jaw = this.breath > 0 ? 0.55 : 0.06;
+    parts.push(_P(0, hy, hz, 0, 0, 0, 0.52, 0.44, 0.56, [E, E, S, Be, S, S]));
+    parts.push(_P(0, hy - 0.05, hz - 0.36, 0, 0, 0, 0.36, 0.24, 0.34, [S, S, S, Be, S, F]));
+    parts.push(_P(0, hy - 0.2, hz + 0.08, 0, 0, -0.3, 0.32, 0.08, 0.56, _6(Be), -jaw));
+    for (const s of [1, -1]) parts.push(_P(s * 0.17, hy + 0.2, hz + 0.18, 0, 0.14, 0.06, 0.07, 0.34, 0.07, H6, 0.95, 0, -s * 0.15));
+    // the tail sways
+    let tz = 0.76, ty = by + 0.05;
+    for (let i = 0; i < 5; i++) {
+      tz += 0.38; ty -= 0.07 * (1 - fly);
+      const s = 0.5 - i * 0.08, swing = Math.sin(t * 2.2 - i * 0.8) * 0.07 * (i + 1);
+      parts.push(_P(swing, ty, tz, 0, 0, 0, s, s * 0.85, 0.42, S6));
+    }
+    parts.push(_P(Math.sin(t * 2.2 - 4.8) * 0.4, ty, tz + 0.3, 0, 0, 0, 0.36, 0.06, 0.26, H6, 0, 0.78));
+    // legs, tucked back in flight
+    for (const [lx, lz, ph] of [[0.32, -0.55, sw], [-0.32, -0.55, -sw], [0.32, 0.55, -sw], [-0.32, 0.55, sw]]) parts.push(_P(lx, by - 0.2, lz, 0, -0.33, 0, 0.22, 0.68, 0.26, S6, ph + fly * 1.1));
+    // the wings: a long inner part from the shoulder, and an outer part hinged at its tip
+    const flap = Math.sin(this.flapPh), a = fly * (0.15 + flap * 0.75) + (1 - fly) * 1.15, b = fly * (flap * 0.35 - 0.1) + (1 - fly) * -2.3;
+    for (const s of [1, -1]) {
+      const sx = s * 0.4, sy = by + 0.32, L1 = 1.15;
+      parts.push(_P(sx, sy, -0.1, s * L1 / 2, 0, 0.1, L1, 0.06, 1.05, W6, 0, 0, s * a));
+      const tx = sx + s * Math.cos(a) * L1, tyy = sy + Math.sin(a) * L1;
+      parts.push(_P(tx, tyy, -0.1, s * 0.5, 0, 0.18, 1.0, 0.05, 0.8, W6, 0, 0, s * (a + b)));
+    }
+    if (this.rider) parts.push(_P(0, by + 0.38, 0.05, 0, 0, 0, 0.7, 0.07, 0.7, _6(L('wool_red'))));   // a blanket to sit on
+    return parts;
+  }
+}
+// a breath of fire: flies straight, bursts on what it meets — burning creatures, setting off barrels of powder, melting ice
+class DragonFire extends Entity {
+  constructor(game, x, y, z, dx, dy, dz, owner, dmg) {
+    super(game, x, y, z);
+    this.kind = 'fireball'; this.bright = true; this.owner = owner; this.dmg = dmg;
+    this.vx = dx * 26; this.vy = dy * 26; this.vz = dz * 26; this.hw = 0.15; this.h = 0.3;
+  }
+  get friendly() { const o = this.owner, g = this.game; return o === g.player || !!(o && o.tamed); }
+  update(dt) {
+    const g = this.game, w = this.world;
+    this.age += dt;
+    if (this.age > 1.3) { this.burst(null); return; }
+    for (let k = 0; k < 2; k++) g.flame(this.x + (Math.random() - 0.5) * 0.3, this.y + (Math.random() - 0.5) * 0.3, this.z + (Math.random() - 0.5) * 0.3);
+    const sp = Math.hypot(this.vx, this.vy, this.vz), len = sp * dt, dx = this.vx / sp, dy = this.vy / sp, dz = this.vz / sp, fr = this.friendly;
+    let hitE = null, hitT = len;
+    const p = g.player, mount = p && p.riding;
+    const list = fr ? g.entities : [p];
+    for (const e of list) {
+      if (!e || e === this.owner || e === mount || e.dead) continue;
+      if (fr && (e.kind !== 'mob' || e.tamed || e.type === 'villager' || e.type === 'merchant')) continue;
+      if (Math.abs(e.x - this.x) > len + 3 || Math.abs(e.z - this.z) > len + 3) continue;
+      const rb = rayBox(this.x, this.y, this.z, dx, dy, dz, e.x - e.hw - 0.2, e.y, e.z - e.hw - 0.2, e.x + e.hw + 0.2, e.y + (e.h || 1.8), e.z + e.hw + 0.2);
+      if (rb && rb.t <= hitT) { hitE = e; hitT = rb.t; }
+    }
+    const hb = raycastBlocks(w, this.x, this.y, this.z, dx, dy, dz, len, true);
+    if (hb && hb.t <= hitT) { const t = Math.max(0, hb.t - 0.1); this.x += dx * t; this.y += dy * t; this.z += dz * t; this.burst(hb); return; }
+    if (hitE) { this.x += dx * hitT; this.y += dy * hitT; this.z += dz * hitT; this.burst(null); return; }
+    this.x += this.vx * dt; this.y += this.vy * dt; this.z += this.vz * dt;
+  }
+  burst(hb) {
+    const g = this.game, w = this.world, fr = this.friendly, p = g.player;
+    this.remove = true;
+    for (let i = 0; i < 16; i++) g.flame(this.x + (Math.random() - 0.5) * 1.6, this.y + (Math.random() - 0.5) * 1.2, this.z + (Math.random() - 0.5) * 1.6);
+    g.audio.fireBurst(this);
+    if (fr) {
+      const mine = this.owner === p || (this.owner && this.owner.tamed);
+      for (const e of g.entities) {
+        if (e.kind !== 'mob' || e.dead || e.tamed || e === this.owner || e.type === 'villager' || e.type === 'merchant') continue;
+        const d = Math.hypot(e.x - this.x, e.y + (e.h || 1) * 0.5 - this.y, e.z - this.z);
+        if (d > 2.6 + e.hw) continue;
+        if (mine) g.playerStrike = PLAYER_SHOT;
+        const hit = e.damage(this.dmg * (d < 1.4 + e.hw ? 1 : 0.6), this.x, this.z, 0.6);
+        g.playerStrike = null;
+        if (!e.fireproof && !e.dead) e.fireT = Math.max(e.fireT || 0, 5);
+        if (hit) { e.hpBarT = 4; if (e.dead && mine) g.onKill(e); }
+      }
+    } else if (p && !p.dead) {
+      const d = Math.hypot(p.x - this.x, p.y + 0.9 - this.y, p.z - this.z);
+      if (d < 2.4) { p.hurt(this.dmg, this.x, this.z, this.owner, 'fire'); if (!p.dead) p.addEffect('burn', 3 * Math.max(0.2, 1 - 0.15 * p.armorEnch('fire_prot'))); }
+    }
+    if (hb) {
+      const b = hb.block;
+      if (b === B.tnt) { w.setBlock(hb.x, hb.y, hb.z, 0, 0, { urgent: true }); g.primeTNT(hb.x, hb.y, hb.z, 1.2, fr); }
+      else if (b === B.ice) w.setBlock(hb.x, hb.y, hb.z, B.water, 0, { urgent: true });
+      else if (b === B.snow) w.setBlock(hb.x, hb.y, hb.z, 0, 0, { urgent: true });
+    }
+  }
+  model() {
+    const f = L('dr_fire');
+    return [_P(0, 0, 0, 0, 0, 0, 0.42, 0.42, 0.42, _6(f), this.age * 9, this.age * 7), _P(0, 0, 0, 0, 0, 0, 0.26, 0.26, 0.26, _6(L('spark_y')), -this.age * 8, 0, this.age * 5)];
+  }
+}
+MOB_TYPES.dragon = Dragon; MOB_TYPES.dragon_egg = DragonEgg;
+MOB_XP.dragon = 0; MOB_XP.dragon_egg = 0;
+
 // ============================================================================
 //  v1.9 — הגולם: a giant of clay that sleeps under the mountain temple (a boss)
 // ============================================================================
@@ -10278,7 +11024,7 @@ class Shark extends Fish {
 MOB_TYPES.viper = Viper; MOB_TYPES.shark = Shark;
 HOSTILE_TYPES.push('viper', 'shark');
 MOB_XP.viper = 5; MOB_XP.shark = 8;
-const GUARD_RANGE = { sunken: 26, grove: 15, saltfort: 22 };
+const GUARD_RANGE = { sunken: 26, grove: 15, saltfort: 22, nest: 30 };
 MOB_TYPES.sentinel = Sentinel;
 MOB_TYPES.golem = Golem; MOB_TYPES.golemling = Golemling;
 HOSTILE_TYPES.push('golem', 'golemling', 'sentinel');
@@ -10340,7 +11086,7 @@ const ACHIEVEMENTS = [
   ['horse', 'פרשים', 'לרכוב על סוס'],
   ['falafel', 'פלאפל!', 'לטגן פלאפל בשמן זית'],
   ['melon', 'קיץ ישראלי', 'לאכול אבטיח וגבינה'],
-  ['trade', 'עסקה טובה', 'לסחור עם רוכל נודד'],
+  ['trade', 'עסקה טובה', 'לסחור עם רוכל נודד או עם כפרי'],
   ['bear', 'אמיצים', 'להביס דוב סורי'],
   ['sling', 'דוד וגוליית', 'לפגוע במפלצת באבן מקלע'],
   ['shield', 'ההגנה הטובה', 'לחסום מכה במגן'],
@@ -10368,6 +11114,13 @@ const ACHIEVEMENTS = [
   ['detector', 'מגלי מטמונים', 'לאתר עפרה או אוצר בגלאי מתכות'],
   ['shark', 'מלתעות', 'להביס כריש'],
   ['viper', 'לוכדי נחשים', 'להביס צפע'],
+  ['villager', 'שכנים טובים', 'לסחור עם כפרי'],
+  ['master', 'לקוח קבוע', 'להביא כפרי לרמה 3'],
+  ['trip', 'טיול', 'לאכול פטריית הזיה ולהתעורר במקום אחר'],
+  ['nest', 'קן בין הפסגות', 'למצוא קן של דרקון'],
+  ['hatch', 'בקיעה', 'לבקוע ביצת דרקון'],
+  ['dragonride', 'רוכבי דרקונים', 'לעוף על דרקון'],
+  ['mother', 'לב אמיץ', 'להכניע את הדרקונית שומרת הקן'],
 ];
 const WP_COLORS = ['#e8cd93', '#d63a45', '#5fb3d9', '#8aa654', '#c27ae0', '#f08c3a', '#f3efe5', '#3fc2a5'];
 const ACH_BY_KEY = Object.fromEntries(ACHIEVEMENTS.map((a) => [a[0], a]));
@@ -10659,7 +11412,7 @@ class Spawner {
     const counts = {};
     for (const t in MOB_TYPES) counts[t] = 0;
     let passive = 0;
-    for (const e of g.entities) if (e.kind === 'mob' && !e.dead && !e.tamed) { counts[e.type] = (counts[e.type] || 0) + 1; if (!HOSTILE_TYPES.includes(e.type)) passive++; }
+    for (const e of g.entities) if (e.kind === 'mob' && !e.dead && !e.tamed) { counts[e.type] = (counts[e.type] || 0) + 1; if (!HOSTILE_TYPES.includes(e.type) && e.type !== 'villager') passive++; }
     const night = g.daylight < 0.3, under = this.underground(p), dark = night || under;
     if (!g.peaceful) this.spawnInDark(g, p, w, counts, night);
     let type;
@@ -10925,8 +11678,9 @@ class Player {
     const sb = document.getElementById('tSneak'); if (sb) sb.classList.remove('on');
     this.swing('use');
     g.ui.toast(e.kind === 'boat' ? 'בסירה! קדימה ואחורה חותרים, ימינה ושמאלה מסובבים. התכופפות יורדת'
-      : (e.type === 'horse' ? 'על הסוס! ריצה דוהרת, קפיצה מקפצת, התכופפות יורדת' : 'רוכבים על הגמל! התכופפות יורדת'), 3.5);
-    g.achieve(e.kind === 'boat' ? 'sail' : (e.type === 'horse' ? 'horse' : 'ride'));
+      : (e.type === 'horse' ? 'על הסוס! ריצה דוהרת, קפיצה מקפצת, התכופפות יורדת'
+        : (e.type === 'dragon' ? 'על הדרקון! קפיצה ממריאה, מסתכלים לאן לטוס ולוחצים קדימה, ריצה מאיצה, התכופפות מנמיכה (ויורדת כשנוחתים), לחיצה שמאלית — אש!' : 'רוכבים על הגמל! התכופפות יורדת')), e.type === 'dragon' ? 6 : 3.5);
+    if (e.type !== 'dragon') g.achieve(e.kind === 'boat' ? 'sail' : (e.type === 'horse' ? 'horse' : 'ride'));
   }
   dismount() {
     const v = this.riding;
@@ -10945,7 +11699,7 @@ class Player {
     if (v.remove || v.dead) { this.dismount(); return; }
     const sneak = !!inp.sneak, edge = sneak && !this.prevSneak;
     this.prevSneak = sneak;
-    if (edge) { this.dismount(); return; }
+    if (edge && !(v.type === 'dragon' && v.flying)) { this.dismount(); return; }   // (in the air, sneaking only sinks)
     v.drive(inp, this, dt);
     this.syncRide();
     this.sprinting = false; this.sneaking = false; this.inWater = false; this.headInWater = false; this.onLadder = false; this.inLava = false;
@@ -10996,7 +11750,9 @@ class Player {
   }
   updateEffects(dt) {
     const E = this.effects, g = this.game;
+    const tripping = E.trip > 0;
     for (const k in E) { E[k] -= dt; if (E[k] <= 0) delete E[k]; }
+    if (tripping && !E.trip && !this.dead) g.tripWakePending = true;   // v2.7: the trip is over — you come to somewhere else
     if (E.regen) {
       this.effRegenT = (this.effRegenT || 0) + dt;
       if (this.effRegenT >= 1.25) { this.effRegenT = 0; if (this.health < this.maxHealth) { this.health = Math.min(this.maxHealth, this.health + 1); g.ui.refreshStatus(); } }
@@ -11380,6 +12136,7 @@ class Player {
     this.starveT = 0;
     if (this.food >= HUNGER.sprintMin) this.hungerStage = 0;
     if (it.effect) this.addEffect(it.effect[0], it.effect[1]);
+    if (it.effect && it.effect[0] === 'trip') { this.tripTotal = this.effects.trip; this.game.ui.toast('הפטרייה מרה… משהו מתחיל לקרות', 2.4); }
   }
 
   updateTarget() {
@@ -11442,7 +12199,7 @@ class Player {
     // attack on press
     if (inp.primaryPressed && this.targetEntity) { this.attack(this.targetEntity); inp.primaryPressed = false; }
     // mining (hold)
-    if (inp.primary && this.target && !this.targetEntity) {
+    if (inp.primary && this.target && !this.targetEntity && !(this.riding && this.riding.type === 'dragon')) {
       const t = this.target, key = t.x + ',' + t.y + ',' + t.z;
       if (this.breakKey !== key) { this.breakKey = key; this.breakProgress = 0; }
       if (this.breakCd <= 0) {
@@ -11591,6 +12348,15 @@ class Player {
       this.swing('use');
       return;
     }
+    if (it && it.key === 'dragon_egg') {   // v2.8: set the egg down (by a fire, if it's to hatch)
+      if (!t) return;
+      const px = t.x + DIR_X[t.face], py = t.y + DIR_Y[t.face], pz = t.z + DIR_Z[t.face];
+      if (B_SOLID[w.getBlock(px, py, pz)] || B_FLUID[w.getBlock(px, py, pz)]) return;
+      const egg = new DragonEgg(g, px + 0.5, py, pz + 0.5);
+      g.addEntity(egg); inv.consumeHeld(1); this.swing('place'); g.audio.place('stone');
+      g.ui.toast(egg.nearWarmth() ? 'הביצה חמימה — עוד כשתי דקות היא תבקע' : 'הביצה צריכה חום: מדורה או לבה במרחק צעד-שניים ממנה', 3);
+      return;
+    }
     if (it && it.key === 'grapple') {   // v2.6: fire the hook — or, if it is out, reel it back in
       if (this.riding) return;
       if (this.hook && !this.hook.remove && this.hook.state !== 'back') { this.hook.state = 'back'; g.audio.hookReel(); }
@@ -11677,12 +12443,12 @@ class Player {
       return;
     }
     if (it && it.food) {
-      const sick = it.cure && (this.effects.poison || this.effects.burn);
+      const sick = it.cure && (this.effects.poison || this.effects.burn || this.effects.trip > 2);
       if (this.food < FOOD_MAX || it.effect || sick) {
         g.eatParticles(this);
         this.eat(held.id);
         if (it.key === 'mint_tea') g.achieve('tea');
-        if (it.cure) { delete this.effects.poison; delete this.effects.burn; }
+        if (it.cure) { delete this.effects.poison; delete this.effects.burn; if (this.effects.trip > 2) this.effects.trip = 2; }   // (milk brings a trip to an end)
         if (it.key === 'watermelon_cheese') g.achieve('melon');
         const slot = inv.selected;
         inv.consumeHeld(1);
@@ -11774,10 +12540,29 @@ class Player {
   }
   // right-click / tap on an animal: feed it, tame it, or tell your dog to sit. Returns true if something happened.
   interactMob(e) {
-    const g = this.game, inv = this.inventory, held = inv.held, id = held ? held.id : null;
+    const g = this.game, inv = this.inventory, held = inv.held, id = held ? held.id : null, it0 = held ? ITEMS[held.id] : null;
     if (e.dead) return false;
     if (e.kind === 'boat') { if (!e.rider) this.mount(e); return true; }
     if (e.type === 'merchant') { this.swing('use'); g.ui.openTrade(e); return true; }
+    // v2.8: an egg tells you how warm it is; your dragon eats, sits, waits — or, grown, carries you
+    if (e.type === 'dragon_egg') {
+      this.swing('use');
+      g.ui.toast(e.isWarm ? 'הביצה חמימה ורועדת… ' + Math.min(99, Math.floor(e.warm / HATCH_TIME * 100)) + '%' : 'הביצה קרה. מניחים אותה ליד מדורה או לבה', 2.4);
+      return true;
+    }
+    if (e.type === 'dragon' && e.tamed) {
+      this.swing('use');
+      if (held && it0 && DRAGON_FOOD[it0.key] !== undefined) { e.feed(held); inv.consumeHeld(1); return true; }
+      if (g.input.sneak || !e.grown) { e.sitting = !e.sitting; e.flying = false; g.ui.toast(e.sitting ? 'הדרקון מחכה כאן' : (e.grown ? 'הדרקון בא אחריכם' : 'הדרקון בא אחריכם — האכילו אותו כדי שיגדל (' + Math.floor(e.grow / DRAGON_GROW * 100) + '%)'), 2); return true; }
+      if (!e.rider) { e.sitting = false; this.mount(e); }
+      return true;
+    }
+    if (e.type === 'villager') {   // v2.7
+      this.swing('use');
+      if (e.panic > 0) g.ui.toast(e.name + ' עדיין ' + (e.female ? 'מפוחדת' : 'מפוחד'), 1.6);
+      else { e.nodT = 0.6; g.ui.openTrade(e); }
+      return true;
+    }
     if (e.type === 'camel' && e.leader) { g.ui.toast('זה הגמל של הרוכל', 1.6); return true; }
     if (e.type === 'camel' && id !== I.dates && !e.baby) { if (!e.rider) this.mount(e); return true; }
     if (e.type === 'horse' && id !== I.apple && !e.baby) { if (!e.rider) this.mount(e); return true; }
@@ -12264,6 +13049,42 @@ class AudioEngine {
   bottleBreak() { this.noise({ t: 'highpass', f: 4200, d: 0.2, g: 0.32 }); this.tone({ type: 'sine', f0: 2400, f1: 3300, d: 0.12, g: 0.04 }); this.noise({ t: 'bandpass', f: 7000, q: 2, d: 0.1, g: 0.12, delay: 0.05 }); }
   toolBreak() { this.noise({ t: 'highpass', f: 2600, d: 0.2, g: 0.3 }); this.tone({ type: 'square', f0: 900, f1: 120, d: 0.25, g: 0.05, lp: 2000 }); }
   // v2.6: the grappling hook and the metal detector
+  // v2.7: strange music only you can hear
+  // v2.8: dragons
+  dragonRoar(m, k) {
+    const s = this.spatial(m.x, m.y, m.z, 60); k = (k || 1) * s.vol;
+    if (k < 0.02) return;
+    this.tone({ type: 'sawtooth', f0: 110, f1: 62, d: 1.4, g: 0.16 * k, lp: 520, vib: 7, vibAmt: 10, a: 0.15, pan: s.pan });
+    this.tone({ type: 'sawtooth', f0: 220, f1: 130, d: 1.1, g: 0.06 * k, lp: 900, vib: 9, vibAmt: 14, a: 0.1, pan: s.pan });
+    this.noise({ t: 'lowpass', f: 700, d: 1.2, g: 0.22 * k, a: 0.2, pan: s.pan });
+  }
+  dragonFire(m) {
+    const s = this.spatial(m.x, m.y, m.z, 40);
+    if (s.vol < 0.02) return;
+    this.noise({ t: 'bandpass', f: 900, f1: 300, q: 0.8, d: 0.55, g: 0.4 * s.vol, a: 0.03, pan: s.pan });
+    this.noise({ t: 'highpass', f: 3000, d: 0.4, g: 0.08 * s.vol, pan: s.pan });
+  }
+  fireBurst(e) {
+    const s = this.spatial(e.x, e.y, e.z, 40);
+    if (s.vol < 0.02) return;
+    this.noise({ t: 'lowpass', f: 900, f1: 200, d: 0.5, g: 0.35 * s.vol, pan: s.pan });
+    for (let i = 0; i < 4; i++) this.noise({ t: 'highpass', f: 2500, d: 0.05, g: 0.1 * s.vol, delay: 0.05 + Math.random() * 0.3, pan: s.pan });
+  }
+  dragonFlap(m) {
+    const s = this.spatial(m.x, m.y, m.z, 40);
+    if (s.vol < 0.02) return;
+    this.noise({ t: 'lowpass', f: 380, d: 0.32, g: 0.22 * s.vol * (m.scale || 1), a: 0.08, pan: s.pan });
+  }
+  eggCrack(e, k) {
+    const s = this.spatial(e.x, e.y, e.z, 24);
+    for (let i = 0; i < 3; i++) this.noise({ t: 'highpass', f: 2600 + Math.random() * 1500, d: 0.03, g: 0.18 * k * s.vol, delay: i * 0.07 + Math.random() * 0.04, pan: s.pan });
+  }
+  tripTone() {
+    if (!this.ok) return;
+    const f = 180 + Math.random() * 700, up = Math.random() < 0.5;
+    this.tone({ type: Math.random() < 0.5 ? 'sine' : 'triangle', f0: f, f1: up ? f * 1.5 : f / 1.5, d: 1.4 + Math.random() * 1.2, g: 0.03, vib: 2 + Math.random() * 6, vibAmt: 25, a: 0.4, dest: this.musicBus });
+    if (Math.random() < 0.4) this.tone({ type: 'sine', f0: f * 1.5, f1: f * 2, d: 1.2, g: 0.02, a: 0.3, delay: 0.3, dest: this.musicBus });
+  }
   hookShoot() { this.noise({ t: 'bandpass', f: 1800, f1: 600, q: 1.2, d: 0.25, g: 0.2 }); this.tone({ type: 'triangle', f0: 700, f1: 1300, d: 0.15, g: 0.04 }); }
   hookHit() { this.noise({ t: 'bandpass', f: 2600, q: 4, d: 0.12, g: 0.3 }); this.tone({ type: 'square', f0: 1500, f1: 1350, d: 0.2, g: 0.035, lp: 3500 }); }
   hookReel() { for (let i = 0; i < 5; i++) this.noise({ t: 'bandpass', f: 3200, q: 3, d: 0.03, g: 0.08, delay: i * 0.05 }); }
@@ -12320,6 +13141,12 @@ class AudioEngine {
       for (let i = 0; i < 5; i++) this.noise({ t: 'highpass', f: 4200, d: 0.015, g: 0.06 * s.vol, delay: 0.32 + i * 0.05, pan: s.pan });
     } else if (m.type === 'hedgehog') {
       for (let i = 0; i < 3; i++) this.noise({ t: 'bandpass', f: 1500, q: 2, d: 0.05, g: 0.06 * s.vol, delay: i * 0.12, pan: s.pan });
+    } else if (m.type === 'dragon') {   // v2.8: a grown dragon rumbles; a hatchling chirps
+      if (m.grown) this.tone({ type: 'sawtooth', f0: 95, f1: 70, d: 0.9, g: 0.1 * s.vol * (m.wild ? 1.4 : 1), lp: 480, vib: 6, vibAmt: 8, a: 0.1, pan: s.pan });
+      else for (let i = 0; i < 3; i++) this.tone({ type: 'square', f0: 900 + Math.random() * 300, f1: 1300, d: 0.07, g: 0.04 * s.vol, lp: 3000, delay: i * 0.1, pan: s.pan });
+    } else if (m.type === 'villager') {   // v2.7: a thoughtful "hmm"
+      const f = m.female ? 240 : 140, n = 2 + ((Math.random() * 2) | 0);
+      for (let i = 0; i < n; i++) this.tone({ type: 'sawtooth', f0: f * (0.9 + Math.random() * 0.3), f1: f * (0.8 + Math.random() * 0.4), d: 0.16, g: 0.05 * s.vol, lp: 900, vib: 6, vibAmt: 8, delay: i * 0.2, pan: s.pan });
     } else if (m.type === 'viper') {   // v2.6: a long hiss
       this.noise({ t: 'highpass', f: 4200, d: 0.9, g: 0.13 * s.vol, a: 0.06, pan: s.pan });
       this.noise({ t: 'bandpass', f: 6500, q: 1.5, d: 0.6, g: 0.05 * s.vol, a: 0.1, delay: 0.1, pan: s.pan });
@@ -12342,6 +13169,8 @@ class AudioEngine {
     else if (m.type === 'pichon') this.tone({ type: 'sawtooth', f0: 110, f1: 70, d: 0.3, g: 0.18 * s.vol, lp: 500, pan: s.pan });
     else if (m.type === 'archer') for (let i = 0; i < 3; i++) this.noise({ t: 'bandpass', f: 1600 + Math.random() * 900, q: 3, d: 0.04, g: 0.2 * s.vol, delay: i * 0.05, pan: s.pan });
     else if (m.type === 'spider') this.noise({ t: 'highpass', f: 3000, d: 0.18, g: 0.16 * s.vol, pan: s.pan });
+    else if (m.type === 'dragon') this.tone({ type: 'sawtooth', f0: m.grown ? 180 : 900, f1: m.grown ? 100 : 600, d: 0.3, g: 0.12 * s.vol, lp: m.grown ? 700 : 2500, pan: s.pan });
+    else if (m.type === 'villager') this.tone({ type: 'sawtooth', f0: m.female ? 520 : 300, f1: m.female ? 380 : 200, d: 0.2, g: 0.08 * s.vol, lp: 1400, pan: s.pan });
     else if (m.type === 'viper') this.noise({ t: 'highpass', f: 3600, d: 0.3, g: 0.16 * s.vol, pan: s.pan });
     else if (m.type === 'shark') { this.noise({ t: 'lowpass', f: 700, d: 0.2, g: 0.22 * s.vol, pan: s.pan }); this.tone({ type: 'sawtooth', f0: 140, f1: 70, d: 0.2, g: 0.06 * s.vol, lp: 500, pan: s.pan }); }
     else if (m.type === 'sentinel') { this.noise({ t: 'highpass', f: 3500, d: 0.12, g: 0.15 * s.vol, pan: s.pan }); this.tone({ type: 'sine', f0: 1760, f1: 1200, d: 0.2, g: 0.06 * s.vol, pan: s.pan }); }
@@ -13078,7 +13907,7 @@ const TIPS = [
   'סירה (חמישה קרשים) מניחים על המים ושטים בה מהר. שלוש מכות מפרקות אותה בחזרה לפריט.',
   'במדבר מגיע לפעמים חמסין: אבק, רוח חמה וראות קצרה. בזמן חמסין מהר מאוד נהיים רעבים.',
   'לחיצה על המפה מוסיפה סימון. הכיוון והמרחק אליו מופיעים בראש המסך.',
-  'בעולם מפוזרים מבנים עתיקים: מקדשים במדבר, כפרים נטושים ומגדלים. צריך לחפש אותם — הם לא קרובים זה לזה.',
+  'בעולם מפוזרים מבנים עתיקים: מקדשים במדבר, כפרים ומגדלים. צריך לחפש אותם — הם לא קרובים זה לזה.',
   'יהלומים מסתתרים עמוק, ליד אבן היסוד. רק מכוש ברזל או יהלום חוצב אותם.',
   'שריון מפחית נזק מהתקפות. לובשים אותו מהתיק, או בלחיצה ימנית כשהוא ביד.',
   'שלדונים יורים חיצים מרחוק — הסתתרו מאחורי קיר או הסתערו עליהם מקרוב.',
@@ -13126,6 +13955,11 @@ const TIPS = [
   'בקרקעית הים העמוק עומדים מקדשים שקועים. כרישים שומרים עליהם, ובקומה העליונה יש כיס אוויר עם האוצר.',
   'מקדשי היער מכוסים עלים. האוצר מתחת לרצפה — אבל התיבות שם ממולכדות.',
   'צפעים אורבים בחול ובמלח. הנשיכה מרעילה — שומעים לחישה? תתרחקו.',
+  'בכפרים גרים אנשים: חקלאי, דייג, נפח, סופר, רועה, רוקחת ובנאי. לחיצה ימנית — וסוחרים איתם בזהב. כל בוקר המלאי מתחדש.',
+  'ככל שסוחרים יותר עם כפרי, הוא עולה ברמה — ובכל רמה נפתחות הצעות חדשות וטובות יותר.',
+  'בפסגות ההרים הגבוהות דרקוניות מקננות. בקן יש ביצה — מניחים אותה ליד מדורה או לבה, ואחרי כשתי דקות בוקע דרקון קטן.',
+  'דרקון גדל עם הזמן, ומהר יותר כשמאכילים אותו בשר או דגים. דרקון גדול — לחיצה ימנית ועולים עליו. קפיצה ממריאה, ולחיצה שמאלית יורקת אש.',
+  'פטריות הזיה זוהרות קלות בפינות מוצלות של היער. מי שאוכל אחת רואה דברים מוזרים מאוד — ומתעורר חמישים צעדים משם.',
 ];
 function fmtAgo(ts) {
   if (!ts) return '';
@@ -13264,6 +14098,10 @@ class UI {
     click('bSignCancel', () => this.closeSign(false));
     click('bTradeClose', () => this.closeTrade());
     click('bSort', () => this.sortBag());
+    click('bCraftTab', () => this.setInvView('craft'));   // v2.9
+    click('bBagTab', () => this.setInvView('bag'));
+    click('bInvClose2', () => this.closeInventory());
+    window.addEventListener('resize', () => { if (this.game.state === 'inventory') this.syncPhoneInv(); });
     $('signInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); this.closeSign(true); } else if (e.key === 'Escape') { e.preventDefault(); this.closeSign(false); } });
     $('recipeSearch').addEventListener('input', () => { this.recipeQuery = $('recipeSearch').value.trim(); this.renderInventory(); });
     $('recipeSearch').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); $('recipeSearch').blur(); } });
@@ -13596,7 +14434,7 @@ class UI {
         }
         if (dh.textContent !== txt) dh.textContent = txt;
       }
-      const E = p.effects, names = { speed: ['מהירות', '#9cc8e5'], regen: ['התחדשות', '#e88aa0'], poison: ['רעל', '#8aa654'], burn: ['בוער', '#ef6a2a'], high: ['מסטול', '#8fd16a'] };
+      const E = p.effects, names = { speed: ['מהירות', '#9cc8e5'], regen: ['התחדשות', '#e88aa0'], poison: ['רעל', '#8aa654'], burn: ['בוער', '#ef6a2a'], high: ['מסטול', '#8fd16a'], trip: ['הזיה', '#d27bff'] };
       let html = '';
       for (const k in E) if (names[k]) { const t = Math.ceil(E[k]); html += '<div class="chip"><b style="background:' + names[k][1] + '"></b>' + names[k][0] + ' <span>' + Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0') + '</span></div>'; }
       if (html !== this.effHtml) { this.effHtml = html; $('effects').innerHTML = html; }
@@ -13688,8 +14526,25 @@ class UI {
     this.stations = this.nearbyStations();
     this.setScreens(['hud', 'inventory']);
     if (!this.invBuilt) this.buildInventory();
+    this.syncPhoneInv();
     this.renderInventory();
     g.audio.open();
+  }
+  // v2.9: a phone shows the bag or the crafting — one page at a time, turned by the button beside "מיון"
+  isPhoneInv() { return IS_TOUCH && (innerWidth <= 700 || innerHeight <= 520); }
+  syncPhoneInv() {
+    const p = $('invPanel'), phone = this.isPhoneInv();
+    p.classList.toggle('phone', phone);
+    p.classList.toggle('craft-view', phone && this.invView === 'craft');
+  }
+  setInvView(v) {
+    this.invView = v;
+    $('recipeSearch').blur();
+    this.syncPhoneInv();
+    this.renderInventory();
+    const c = v === 'craft' ? $('craftCol') : $('invPanel').querySelector('.inv-col');
+    if (c) c.scrollTop = 0;
+    $('invPanel').scrollTop = 0;
   }
   closeInventory() {
     const g = this.game;
@@ -13975,6 +14830,8 @@ class UI {
     else if (st.id === I.salt) sub = 'ממליחים בו דגים, ובונים ממנו גושי מלח ומנורות מלח';
     else if (st.id === I.salt_lamp) sub = 'מאירה באור כתום וחמים';
     else if (st.id === I.mud) sub = 'בוץ ים המלח — הולכים עליו לאט';
+    else if (st.id === I.dragon_egg) sub = 'מניחים על הקרקע ליד מדורה, לבה, כבשן או נר שמן. אחרי כשתי דקות של חום — בוקע דרקון! לחיצה שמאלית על הביצה מרימה אותה';
+    else if (st.id === I.trip_shroom) sub = 'אוכלים — ורואים דברים מוזרים מאוד במשך כ-45 שניות. בסוף מתעוררים חמישים צעדים משם. חלב מקצר את ההזיה';
     else if (it.armor && it.armor.tier === 'golem') sub = 'שריון +' + it.armor.points + ' — עמידות ' + st.dur + '/' + it.maxDur + '. סט מלא מגן מאש ולבה';
     else if (it.armor) sub = 'שריון +' + it.armor.points + ' — עמידות ' + st.dur + '/' + it.maxDur;
     else if (it.bow) sub = 'החזיקו לחצן ימני ושחררו כדי לירות — עמידות ' + st.dur + '/' + it.maxDur;
@@ -14258,6 +15115,8 @@ class UI {
     g.state = 'trade'; g.input.releaseAll();
     if (document.pointerLockElement) document.exitPointerLock();
     this.tradeWith = m;
+    if (m.type === 'villager') m.refreshOffers();
+    $('tradeTitle').textContent = m.type === 'villager' ? m.name : 'רוכל נודד';
     this.renderTrade();
     this.setScreens(['hud', 'trade']);
     g.audio.open(); g.audio.mobCall(m);
@@ -14266,17 +15125,21 @@ class UI {
     const g = this.game, inv = g.player.inventory, m = this.tradeWith, list = $('tradeList');
     if (!m) return;
     $('tradeGold').textContent = 'זהב בתיק: ' + inv.count(I.gold_ingot);
+    const vil = m.type === 'villager', lv = vil ? m.level : 3;
+    if (vil) { const t = m.rec().t; $('tradeHint').textContent = 'רמה ' + lv + (lv < 3 ? ' · עוד ' + (VL_STEPS[lv + 1] - t) + ' עסקאות לרמה ' + (lv + 1) + ' — ואז נפתחות הצעות חדשות' : ' · הרמה הגבוהה ביותר') + '. המלאי מתחדש כל בוקר.'; }
+    else $('tradeHint').textContent = 'מחליפים סחורה בזהב, וזהב בסחורה. כל הצעה מוגבלת — והרוכל לא נשאר לנצח.';
     list.innerHTML = '';
     for (const o of m.offers) {
-      const row = document.createElement('div'); row.className = 'trade-row' + (o.left <= 0 ? ' done' : '');
+      const locked = vil && o.tier > lv;
+      const row = document.createElement('div'); row.className = 'trade-row' + (locked ? ' locked' : (o.left <= 0 ? ' done' : ''));
       const add = (id, n) => { const i = document.createElement('i'); i.style.backgroundImage = this.iconCss(id); i.title = ITEMS[id].name; const s = document.createElement('span'); s.className = 'n'; s.textContent = '×' + n; row.append(i, s); };
       for (const [id, n] of o.give) add(id, n);
       const ar = document.createElement('span'); ar.className = 'arrow'; ar.textContent = '←'; row.append(ar);
       add(o.get[0], o.get[1]);
       const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = ITEMS[o.get[0]].name + (o.ench ? ': ' + Object.keys(o.ench).map((k) => enchText(k, o.ench[k])).join(', ') : ''); row.append(nm);
       if (o.ench) nm.style.color = '#e3cdff';
-      const can = o.left > 0 && o.give.every(([id, n]) => inv.count(id) >= n);
-      const left = document.createElement('span'); left.className = 'left'; left.textContent = o.left > 0 ? 'נשארו ' + o.left : 'אזל';
+      const can = !locked && o.left > 0 && o.give.every(([id, n]) => inv.count(id) >= n);
+      const left = document.createElement('span'); left.className = 'left'; left.textContent = locked ? 'ברמה ' + o.tier : (o.left > 0 ? 'נשארו ' + o.left : (vil ? 'אזל — מחר יהיה' : 'אזל'));
       const b = document.createElement('button'); b.className = 'btn small' + (can ? ' primary' : ''); b.textContent = 'החלפה'; b.disabled = !can;
       b.onclick = () => this.doTrade(o);
       row.append(left, b);
@@ -14285,7 +15148,8 @@ class UI {
   }
   doTrade(o) {
     const g = this.game, inv = g.player.inventory;
-    if (o.left <= 0 || !o.give.every(([id, n]) => inv.count(id) >= n)) return;
+    const vil = this.tradeWith && this.tradeWith.type === 'villager' ? this.tradeWith : null;
+    if (o.left <= 0 || (vil && o.tier > vil.level) || !o.give.every(([id, n]) => inv.count(id) >= n)) return;
     for (const [id, n] of o.give) inv.remove(id, n);
     const meta = o.ench ? { ench: o.ench } : null;
     const left = inv.add(o.get[0], o.get[1], undefined, undefined, meta);
@@ -14293,6 +15157,13 @@ class UI {
     o.left--;
     g.player.addXp(2 + Math.floor(Math.random() * 4)); g.audio.xp();
     g.audio.trade(); g.achieve('trade');
+    if (vil) {   // v2.7: the villager remembers — and moves up a level now and then
+      const r = vil.rec(), lv0 = vlLevel(r.t);
+      r.u[o.i] = (r.u[o.i] || 0) + 1; r.t++; vil.nodT = 0.6;
+      g.achieve('villager');
+      const lv = vlLevel(r.t);
+      if (lv > lv0) { this.toast(vil.name + (vil.female ? ' עלתה' : ' עלה') + ' לרמה ' + lv + ' — יש הצעות חדשות!', 2.8); g.hearts(vil, 6); g.audio.discover(); if (lv === 3) g.achieve('master'); }
+    }
     g.stats.trades = (g.stats.trades || 0) + 1;
     this.renderTrade();
   }
@@ -14440,7 +15311,7 @@ class UI {
       if (glyph) { ctx.font = '900 ' + Math.round(10 * dpr) + 'px Rubik, Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#0e1014'; ctx.fillText(glyph, x, y + dpr); }
     };
     // places you have found
-    const gen = g.world.gen, colors = { temple: '#e8cd93', village: '#8aa654', tower: '#a7aebb', oasis: '#5fb3d9', mine: '#b07a46', wreck: '#3f8fc0', khan: '#d9a35c', crater: '#c9734a', shrine: '#c4b2ea', sunken: '#3fc2a5', grove: '#5f9a3a', saltfort: '#f2eee6' };
+    const gen = g.world.gen, colors = { temple: '#e8cd93', village: '#8aa654', tower: '#a7aebb', oasis: '#5fb3d9', mine: '#b07a46', wreck: '#3f8fc0', khan: '#d9a35c', crater: '#c9734a', shrine: '#c4b2ea', sunken: '#3fc2a5', grove: '#5f9a3a', saltfort: '#f2eee6', nest: '#e0603a' };
     for (const key of g.discovered) {
       const parts = key.split(':');
       const st = parts[0] === 'mine' ? gen.mineshaft(+parts[1], +parts[2]) : (parts[0] === 'crater' ? gen.crater(+parts[1], +parts[2]) : (gen.structs.T[parts[0]] ? gen.structs.candidate(parts[0], +parts[1], +parts[2]) : null));
@@ -14830,7 +15701,7 @@ class Game {
   // ---------------- world lifecycle ----------------
   newWorld(name, seedText) {
     const seed = seedFromText(seedText);
-    const meta = { v: GAME_VERSION, gen: 9, structVer: 3, id: uid(), name, seed, seedText: seedText || String(seed), created: Date.now(), lastPlayed: Date.now(), savedAt: 0, day: 1 };
+    const meta = { v: GAME_VERSION, gen: 11, structVer: 3, id: uid(), name, seed, seedText: seedText || String(seed), created: Date.now(), lastPlayed: Date.now(), savedAt: 0, day: 1 };
     this.startWorld(meta, {}, true);
   }
   async loadWorld(id, preferCloud) {
@@ -14892,14 +15763,16 @@ class Game {
     // older worlds: keep what the player has already seen. Land around their position and spawn gets no new
     // structures (pre-1.3) or new terrain features (ravines, new trees, ice...); v1.3 worlds keep their structure layout.
     const zones = () => [{ x: Math.round(p.x), z: Math.round(p.z), r: 220 }, { x: Math.round(p.spawn.x), z: Math.round(p.spawn.z), r: 220 }];
-    if (!meta.gen) { meta.gen = 9; meta.structVer = 3; meta.structExclude = zones(); meta.featExclude = zones(); }
-    else if (meta.gen === 2) { meta.gen = 9; meta.structVer = 2; meta.featExclude = zones(); }
-    else if (meta.gen === 3) { meta.gen = 9; meta.feat15Exclude = zones(); }   // v1.4 world: v1.5 features (mines, oases, gold, mint) only in new land
-    else if (meta.gen === 4) { meta.gen = 9; meta.feat16Exclude = zones(); }   // v1.5 world: lava lakes and pools only in new land
-    else if (meta.gen === 5) { meta.gen = 9; meta.feat17Exclude = zones(); }   // v1.6 world: craters, wrecks, khans, reefs... only in new land
-    else if (meta.gen === 6) { meta.gen = 9; meta.feat18Exclude = zones(); }   // v1.7 world: wild cannabis only in new land
-    else if (meta.gen === 7) { meta.gen = 9; meta.feat19Exclude = zones(); }   // v1.8 world: mountain temples only in new land
-    else if (meta.gen === 8) { meta.gen = 9; meta.feat20Exclude = zones(); }   // v2.5 world: the salt sea and the new temples only in new land
+    if (!meta.gen) { meta.gen = 11; meta.structVer = 3; meta.structExclude = zones(); meta.featExclude = zones(); }
+    else if (meta.gen === 2) { meta.gen = 11; meta.structVer = 2; meta.featExclude = zones(); }
+    else if (meta.gen === 3) { meta.gen = 11; meta.feat15Exclude = zones(); }   // v1.4 world: v1.5 features (mines, oases, gold, mint) only in new land
+    else if (meta.gen === 4) { meta.gen = 11; meta.feat16Exclude = zones(); }   // v1.5 world: lava lakes and pools only in new land
+    else if (meta.gen === 5) { meta.gen = 11; meta.feat17Exclude = zones(); }   // v1.6 world: craters, wrecks, khans, reefs... only in new land
+    else if (meta.gen === 6) { meta.gen = 11; meta.feat18Exclude = zones(); }   // v1.7 world: wild cannabis only in new land
+    else if (meta.gen === 7) { meta.gen = 11; meta.feat19Exclude = zones(); }   // v1.8 world: mountain temples only in new land
+    else if (meta.gen === 8) { meta.gen = 11; meta.feat20Exclude = zones(); }   // v2.5 world: the salt sea and the new temples only in new land
+    else if (meta.gen === 9) { meta.gen = 11; meta.feat21Exclude = zones(); }   // v2.6 world: hallucination mushrooms only in new land
+    else if (meta.gen === 10) { meta.gen = 11; meta.feat22Exclude = zones(); }   // v2.7 world: dragons' nests only in new land
     w.gen.structs.setVersion(meta.structVer || 3);
     w.gen.structs.exclude = meta.structExclude || [];
     w.gen.featExclude = meta.featExclude || [];
@@ -14909,6 +15782,8 @@ class Game {
     w.gen.feat18Exclude = meta.feat18Exclude || [];
     w.gen.feat19Exclude = meta.feat19Exclude || [];
     w.gen.feat20Exclude = meta.feat20Exclude || [];
+    w.gen.feat21Exclude = meta.feat21Exclude || [];
+    w.gen.feat22Exclude = meta.feat22Exclude || [];
     w.gen.oldZones = [].concat(w.gen.structs.exclude, w.gen.featExclude, w.gen.feat15Exclude, w.gen.feat16Exclude, w.gen.feat17Exclude, w.gen.feat18Exclude, w.gen.feat19Exclude, w.gen.feat20Exclude);
     w.gen.craters.clear();
     this.lastPcx = null;
@@ -14952,6 +15827,7 @@ class Game {
   disposeWorld() {
     this.dim = 0; this.boss = null; this.traveling = false;
     this.renderer.canvas.style.filter = ''; this.highFilter = false; this.ui.fade(false);
+    this.renderer.canvas.style.transform = ''; this.tripFilter = false; this.tripWakePending = false; this.tripFading = false; $('tripfx').style.opacity = 0;
     if (!this.world) return;
     for (const c of this.world.chunks.values()) this.renderer.deleteChunk(c);
     this.world = null; this.player = null; this.entities = []; this.genQueue = [];
@@ -15067,7 +15943,7 @@ class Game {
     }
     if (inp.touch) inp.updateTouch();
     if (this.state === 'playing' || this.state === 'inventory' || this.state === 'dead') {
-      p.update(dt, this.state === 'playing' && this.sleepT <= 0 && !(p.koT > 0) ? inp : NULL_INPUT);
+      p.update(dt, this.state === 'playing' && this.sleepT <= 0 && !(p.koT > 0) && !this.tripFading ? inp : NULL_INPUT);
       for (let i = this.entities.length - 1; i >= 0; i--) {
         const e = this.entities[i];
         e.update(dt);
@@ -15076,7 +15952,7 @@ class Game {
       if (p.riding) p.syncRide();   // the rider moves with the camel or boat
       this.spawner.update(dt);
       const before = this.timeOfDay;
-      this.timeOfDay += dt / DAY_LENGTH;
+      this.timeOfDay += dt * dayRate(this.timeOfDay);
       if (this.timeOfDay >= 1) { this.timeOfDay -= 1; this.day++; this.ui.showTitle('יום ' + this.day, ''); if (!p.dead) this.achieve('night'); }
       if (this.weather.dust > 0.05) this.dustParticles(dt);
       this.lavaFxT = (this.lavaFxT || 0) - dt;
@@ -15092,6 +15968,7 @@ class Game {
       this.dimTick(dt);
       this.tableTick(dt);
       this.updateHigh(dt);
+      this.updateTrip(dt);
       this.fluidTimer += dt;
       if (this.fluidTimer >= 0.25) { this.fluidTimer = 0; w.fluidTick(); }
       this.stats.playTime = (this.stats.playTime || 0) + dt;
@@ -15431,6 +16308,11 @@ class Game {
     const put = (Cls, list, max, ly0, ly1, water) => { for (const [lx, lz] of list) { if (n >= max) break; const q = spot(lx, lz, st.y + ly0, st.y + ly1, water); if (q) { this.addEntity(new Cls(this, q[0], q[1], q[2])); n++; } } };
     if (st.type === 'sunken') { put(Shark, [[-7, 0], [7, 2], [0, 14], [-14, -3], [12, -12]], 3, 2, 5, true); if (n) this.ui.toast('כרישים שומרים על המקדש!', 2.4); }
     else if (st.type === 'grove') { put(Spider, [[-6, 0], [6, 1], [0, 5], [-6, -6], [6, -6]], 3, 1, 2, false); if (n) this.ui.toast('משהו זז בחושך של המקדש…', 2.4); }
+    else if (st.type === 'nest') {   // v2.8
+      const m = new Dragon(this, st.x + 0.5, st.y + 12, st.z + 0.5, { wild: true, color: hash2(st.x, st.z, w.seed) % DRAGON_COLORS.length, home: [st.x + 0.5, st.y, st.z + 0.5] });
+      this.addEntity(m); if (!this.boss || this.boss.remove) this.boss = m;
+      this.ui.showTitle('הדרקונית שומרת הקן!', 'היא לא תמסור את הביצים שלה בלי קרב'); this.audio.dragonRoar(m, 1);
+    }
     else if (st.type === 'saltfort') { put(Viper, [[-4, -4], [4, 0], [-6, -1], [0, -7], [-3, -8], [6, -1]], 4, 1, 2, false); if (n) this.ui.toast('צפעים זוחלים בחצר המצודה!', 2.4); }
   }
   // the forest temple's chests are trapped: open one and arrows fly out of the walls
@@ -15605,6 +16487,131 @@ class Game {
     this.snoreT -= dt;
     if (this.snoreT <= 0) { this.snoreT = 2.4; this.audio.snore(); }
   }
+  // ---------------- v2.7: the people of the villages come out when you come near ----------------
+  villageTick(p) {
+    for (const v of this.world.gen.structs.near('village', p.x, p.z, 80)) {
+      if (Math.hypot(v.x - p.x, v.z - p.z) > 64 || !this.world.isLoaded(v.x, v.z)) continue;
+      this.ensureVillagers(v);
+    }
+  }
+  ensureVillagers(v) {
+    const w = this.world, doors = w.gen.structs.plan(v).doors || [];
+    const n = Math.min(3 + (hash2(v.x, v.z, w.seed ^ 0x7111) % 3), doors.length + 2);
+    const here = new Set();
+    for (const e of this.entities) if (e.type === 'villager' && e.village === v.key && !e.dead && !e.remove) here.add(e.idx);
+    if (!this.meta.villagers) this.meta.villagers = {};
+    for (let i = 0; i < n; i++) {
+      if (here.has(i)) continue;
+      const vk = v.key + '#' + i, rec = this.meta.villagers[vk] || (this.meta.villagers[vk] = { t: 0, d: 0, u: [] });
+      if (rec.dead !== undefined) { if (this.day <= rec.dead) continue; delete rec.dead; rec.t = 0; rec.u = []; rec.gen = (rec.gen || 0) + 1; }   // someone new has moved in
+      const home = doors.length ? doors[i % doors.length] : [v.x + 4, v.z + i - 2];
+      let spot = null;
+      for (const [hx, hz] of [home, [v.x + 4, v.z + i - 2], [v.x - 4, v.z + 2 - i]]) {
+        if (!w.isLoaded(hx, hz)) continue;
+        const y = w.surfaceY(hx, hz) + 1;
+        if (y > 1 && !B_SOLID[w.getBlock(hx, y, hz)] && !B_FLUID[w.getBlock(hx, y, hz)] && !B_SOLID[w.getBlock(hx, y + 1, hz)] && !B_FLUID[w.getBlock(hx, y - 1, hz)]) { spot = [hx, y, hz]; break; }
+      }
+      if (!spot) continue;
+      const h = hash2(v.x * 7 + i * 131 + (rec.gen || 0) * 977, v.z, w.seed ^ 0x7a11e);
+      const prof = VL_KEYS[(hash2(v.x, v.z, w.seed ^ 0x9f0f) + i) % VL_KEYS.length], female = (h & 1) === 1, names = female ? VL_NAMES_F : VL_NAMES_M;
+      const person = names[(hash2(v.x, v.z, w.seed ^ 0x4e4e) + i * 5 + (rec.gen || 0) * 7) % names.length];   // (nobody shares a name with a neighbour)
+      this.addEntity(new Villager(this, spot[0] + 0.5, spot[1], spot[2] + 0.5, { village: v.key, idx: i, prof, female, person, home: [home[0], home[1]], plaza: [v.x + 0.5, v.z + 0.5], seed: h }));
+    }
+  }
+
+  // ---------------- v2.7: hallucination mushrooms — the world swims, things that aren't there come and go,
+  //                  and when it's over you come to fifty paces from where you were ----------------
+  updateTrip(dt) {
+    const p = this.player, E = p.effects, cv = this.renderer.canvas, fx = $('tripfx');
+    const left = E.trip || 0, total = p.tripTotal || 45;
+    const want = left > 0 ? clamp(Math.min((total - left) / 5, left / 4), 0, 1) : 0, k0 = p.tripK || 0;
+    p.tripK = clamp(k0 + clamp(want - k0, -dt * 0.7, dt * 0.5), 0, 1);
+    this.tripClock = (this.tripClock || 0) + dt;
+    const k = p.tripK, t = this.tripClock;
+    if (k > 0.003) {
+      this.tripFlash = Math.max(0, (this.tripFlash || 0) - dt);
+      if (k > 0.6 && Math.random() < dt * 0.18) this.tripFlash = 0.16;
+      cv.style.filter = 'hue-rotate(' + Math.round(((t * 75) % 360) * k) + 'deg) saturate(' + (1 + 2.2 * k).toFixed(2) + ') contrast(' + (1 + 0.3 * k).toFixed(2) + ')' + (this.tripFlash > 0 ? ' invert(1)' : '');
+      cv.style.transform = 'rotate(' + (Math.sin(t * 0.55) * 3.5 * k).toFixed(2) + 'deg) scale(' + (1 + 0.07 * k + Math.sin(t * 1.1) * 0.025 * k).toFixed(3) + ') skew(' + (Math.sin(t * 0.8) * 4 * k).toFixed(2) + 'deg,' + (Math.cos(t * 0.67) * 2.5 * k).toFixed(2) + 'deg)';
+      this.tripFxT = (this.tripFxT || 0) - dt;
+      if (this.tripFxT <= 0) {
+        this.tripFxT = 0.05;
+        const h = Math.round(t * 60) % 360, cx = 50 + Math.sin(t * 0.7) * 30, cy = 50 + Math.cos(t * 0.5) * 25, s1 = Math.round(90 + Math.sin(t) * 30), s2 = Math.round(180 + Math.sin(t) * 60);
+        fx.style.background = 'repeating-radial-gradient(circle at ' + cx.toFixed(1) + '% ' + cy.toFixed(1) + '%, hsl(' + h + ',90%,60%) 0, hsl(' + (h + 120) + ',90%,60%) ' + s1 + 'px, hsl(' + (h + 240) + ',90%,60%) ' + s2 + 'px)';
+        fx.style.opacity = (0.26 * k).toFixed(3);
+      }
+      this.tripFilter = true;
+      if (!p.dead && left > 2) {
+        this.illT = (this.illT || 0) - dt;
+        if (this.illT <= 0) { this.illT = (0.7 + Math.random() * 1.6) / Math.max(0.3, k); this.spawnIllusion(p); }
+        this.tripLineT = (this.tripLineT === undefined ? 3 : this.tripLineT) - dt;
+        if (this.tripLineT <= 0 && k > 0.5) { this.tripLineT = 6 + Math.random() * 5; this.ui.toast(TRIP_LINES[(Math.random() * TRIP_LINES.length) | 0], 2.6); }
+        this.tripToneT = (this.tripToneT || 0) - dt;
+        if (this.tripToneT <= 0) { this.tripToneT = 1 + Math.random() * 2.5; this.audio.tripTone(); }
+        if (Math.random() < dt * 10 * k) {   // sparks of colour drifting up all around
+          const a = Math.random() * Math.PI * 2, r = 2.5 + Math.random() * 4, cols = ['spark_r', 'spark_g', 'spark_b', 'spark_y', 'spark_p'];
+          this.particle({ x: p.x + Math.cos(a) * r, y: p.y + Math.random() * 2.5, z: p.z + Math.sin(a) * r, vx: 0, vy: 0.4 + Math.random() * 0.6, vz: 0, g: -0.2, collide: false, life: 1.2 + Math.random(), size: 0.04 + Math.random() * 0.05,
+            layer: Tex.id(cols[(Math.random() * 5) | 0]), u: 0, v: 0, us: 0.5, bright: true });
+        }
+        if (this.state === 'playing') { p.yaw += Math.sin(t * 0.43) * 0.16 * k * dt; p.pitch = clamp(p.pitch + Math.sin(t * 0.61) * 0.06 * k * dt, -1.55, 1.55); }   // the view drifts
+      }
+    } else if (this.tripFilter) { cv.style.filter = ''; cv.style.transform = ''; fx.style.opacity = 0; this.tripFilter = false; this.highFilter = true; }
+    if (this.tripWakePending && this.state === 'playing' && !this.traveling && !p.dead) { this.tripWakePending = false; this.tripWake(); }
+  }
+  spawnIllusion(p) {
+    let n = 0;
+    for (const e of this.entities) if (e.kind === 'illusion') n++;
+    if (n > 16) return;
+    const pick = (a) => a[(Math.random() * a.length) | 0], r = Math.random();
+    const mode = r < 0.2 ? 'orbit' : (r < 0.34 ? 'charge' : (r < 0.46 ? 'giant' : (r < 0.6 ? 'float' : (r < 0.74 ? 'rain' : (r < 0.88 ? 'dance' : 'swarm')))));
+    const what = (mode === 'float' || mode === 'rain' || mode === 'orbit') && Math.random() < 0.2 ? B[pick(ILLUSION_BLOCKS)] : pick(ILLUSION_MOBS);
+    const count = mode === 'rain' ? 4 + ((Math.random() * 5) | 0) : (mode === 'swarm' ? 6 : 1);
+    let last = null;
+    for (let i = 0; i < count; i++) { const e = new Illusion(this, mode, what); e.setup(p, i, count); this.addEntity(e); last = e; }
+    if (last && last.inner && Math.random() < 0.6) { last.inner.x = last.x; last.inner.y = last.y; last.inner.z = last.z; this.audio.mobCall(last.inner); }
+  }
+  async tripWake() {
+    const p = this.player, w = this.world;
+    if (!p || p.dead || this.traveling) return;
+    let dest = null;
+    for (let k = 0; k < 24 && !dest; k++) {
+      const a = Math.random() * Math.PI * 2, x = Math.floor(p.x + Math.cos(a) * 50), z = Math.floor(p.z + Math.sin(a) * 50);
+      if (this.dim) { if (w.isLoaded(x, z) && w.surfaceY(x, z) > 2) dest = [x, z]; continue; }   // in the other worlds: only onto land that's there
+      if (w.gen.column(x, z, {}).h >= SEA_LEVEL || k >= 16) dest = [x, z];   // dry land if there is any
+    }
+    if (!dest) { this.ui.toast('…הראש מתבהר לאט', 2.4); return; }
+    this.traveling = true; this.tripFading = true;
+    const quit = () => { this.traveling = false; this.tripFading = false; };
+    if (p.riding) p.dismount();
+    if (p.hook) { p.hook.remove = true; p.hook = null; }
+    if (p.gliding) p.stopGlide();
+    this.ui.fade(true, '…');
+    const t0 = performance.now();
+    while (performance.now() - t0 < 1300 || this.state !== 'playing') { await nextFrame(); if (this.world !== w || p.dead) { quit(); this.ui.fade(false); return; } }
+    this.state = 'loading';
+    const [x, z] = dest;
+    p.x = x + 0.5; p.z = z + 0.5; p.y = WH - 4; p.vx = p.vy = p.vz = 0; p.fallTop = null;
+    this.lastPcx = null;
+    const targets = [];
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) targets.push(ckey((x >> 4) + dx, (z >> 4) + dz));
+    for (let guard = 0; guard < 1500; guard++) {
+      this.updateChunks(36);
+      let ready = 0;
+      for (const kk of targets) { const c = w.chunks.get(kk); if (c && c.mesh && !c.dirty) ready++; }
+      if (ready >= targets.length) break;
+      await nextFrame();
+      if (this.world !== w) { quit(); return; }
+    }
+    p.y = Math.max(1, w.surfaceY(x, z) + 1); p.fallTop = null;
+    this.ensureFree(p);
+    p.yaw = Math.random() * Math.PI * 2; p.pitch = -0.15;
+    this.state = 'playing'; quit();
+    this.ui.fade(false);
+    this.ui.showTitle('…איפה אני?', 'התעוררתם חמישים צעדים מהמקום שבו הייתם');
+    this.achieve('trip');
+    this.stats.trips = (this.stats.trips || 0) + 1;
+    this.audio.portalWhoosh();
+  }
   updateHigh(dt) {
     const p = this.player, E = p.effects, cv = this.renderer.canvas;
     const want = E.high ? Math.min(1, E.high / 8) : 0, k0 = p.highK || 0;
@@ -15647,6 +16654,7 @@ class Game {
       }
       return;
     }
+    this.villageTick(p);
     for (const st of this.world.gen.structs.around(p.x, p.z, 40)) {
       // v2.6: the keepers of the new temples wake once, the first time someone comes near
       const gr = GUARD_RANGE[st.type];
@@ -15664,6 +16672,7 @@ class Game {
         if (st.type === 'shrine') { this.achieve('shrine'); this.ui.toast('מדרגות לולייניות יורדות מכאן אל מתחת להר…', 3); }
         if (st.type === 'sunken') { this.achieve('sunken'); this.ui.toast('למעלה יש כיס אוויר — שוחים אליו דרך הפתח הזוהר בתקרת האולם', 3.4); }
         if (st.type === 'grove') { this.achieve('grove'); this.ui.toast('משהו מסתתר מתחת לרצפה…', 3); }
+        if (st.type === 'nest') { this.achieve('nest'); this.ui.toast('בקן יש ביצת דרקון — קחו אותה והניחו ליד מדורה', 3.2); }
         if (st.type === 'saltfort') { this.achieve('saltfort'); this.ui.toast('את האוצרות שומרים במרתף', 3); }
         this.audio.discover();
       }
@@ -15740,6 +16749,7 @@ class Game {
   respawn() {
     const p = this.player;
     p.respawn();
+    this.tripWakePending = false;
     if (!this.world.isLoaded(Math.floor(p.x), Math.floor(p.z))) { this.lastPcx = null; }
     this.ensureFree(p);
     this.state = 'playing';
@@ -15832,6 +16842,13 @@ class Game {
   petList() { return this.entities.filter((e) => (e.tamed || e.kind === 'boat') && !e.dead && !e.remove).concat(this.petsAway || []); }
   spawnPet(rec) {
     if (rec.type === 'boat') { const b = new Boat(this, rec.x, rec.y, rec.z, rec.yaw); this.addEntity(b); return b; }
+    if (rec.type === 'egg') { const e = new DragonEgg(this, rec.x, rec.y, rec.z); e.warm = rec.warm || 0; this.addEntity(e); return e; }
+    if (rec.type === 'dragon') {
+      const d = new Dragon(this, rec.x, rec.y, rec.z, { color: rec.color || 0, grow: rec.grow !== undefined ? rec.grow : DRAGON_GROW });
+      d.health = rec.health > 0 ? rec.health : d.maxHealth; d.sitting = !!rec.sitting;
+      this.addEntity(d);
+      return d;
+    }
     const d = new Dog(this, rec.x, rec.y, rec.z);
     d.tamed = true; d.maxHealth = 20; d.health = rec.health > 0 ? rec.health : 20; d.sitting = !!rec.sitting; d.name = rec.name || 'כלב';
     this.addEntity(d);
@@ -16206,7 +17223,6 @@ class Game {
 // ============================================================================
 //  Boot
 // ============================================================================
-window.__cls = { Game, Player, World, Renderer, UI, Spawner, Entity, ItemEntity, XpOrb, XpBottle, TableBook, Mob, Gazelle, Pichon, Hoopoe, Arrow, Pebble, FallingBlock, Archer, Spider, Grazer, Chicken, Ibex, Fish, Bat, Dog, Jackal, Scorpion, Camel, Boat, Sheep, Cow, Horse, Bear, Bee, Turtle, Dolphin, Hedgehog, Butterfly, Merchant, Golem, Golemling, Boulder, Shockwave, FireworkRocket, Sentinel, Viper, Bobber, GrappleHook, PrimedTNT, LightningBolt, heldLightOf, ITEMS, uid, makeStack, packPos, MOB_TYPES, I, B, ckey };
 // light level (0-15) a player emits from the item in hand / offhand slot (shared with multiplayer)
 function heldLightOf(hp) {
   if (!hp || hp.dead || !hp.inventory) return 0;
@@ -16214,6 +17230,7 @@ function heldLightOf(hp) {
   const o4 = hp.inventory.armor ? hp.inventory.armor[4] : null, oit = o4 ? ITEMS[o4.id] : null;
   return Math.max(hit ? (hit.key === 'lava_bucket' ? 13 : (hit.block !== null ? B_EMIT[hit.block] : 0)) : 0, oit && oit.block !== null ? B_EMIT[oit.block] : 0);
 }
+window.__cls = { Game, Player, World, Renderer, UI, Spawner, Entity, ItemEntity, XpOrb, XpBottle, TableBook, Mob, Gazelle, Pichon, Hoopoe, Arrow, Pebble, FallingBlock, Archer, Spider, Grazer, Chicken, Ibex, Fish, Bat, Dog, Jackal, Scorpion, Camel, Boat, Sheep, Cow, Horse, Bear, Bee, Turtle, Dolphin, Hedgehog, Butterfly, Merchant, Golem, Golemling, Boulder, Shockwave, FireworkRocket, Sentinel, Viper, Bobber, GrappleHook, Villager, Illusion, DragonEgg, Dragon, DragonFire, Shard, Shark, Inventory, heldLightOf, PrimedTNT, LightningBolt, ITEMS, uid, makeStack, packPos, MOB_TYPES, I, B, ckey };
 function bootRegev() {
   try {
     const game = new Game();
