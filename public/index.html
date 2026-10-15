@@ -486,7 +486,7 @@ html.pad #clickPlay { display: none !important; }
       <button class="btn" id="bHelp">איך משחקים</button>
     </div>
     <button class="btn small fs-btn" id="bFsMenu"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path class="fs-in" d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/><path class="fs-out" d="M9 3v6H3M15 3v6h6M21 15h-6v6M3 15h6v6"/></svg><span class="fs-label">מסך מלא</span></button>
-    <div class="version">REGEV v3.0</div>
+    <div class="version">REGEV v3.1</div>
   </div>
 
   <div id="worlds" class="screen">
@@ -2776,6 +2776,39 @@ DRAGON_COLORS.forEach(([, a, b], i) => {
   });
 });
 Tex.def('dr_horn', (p, r) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, sh(mixc([236, 226, 196], [150, 132, 104], y / 15), 0.92 + r() * 0.1)); });
+// v3.1: the player wears a knitted kippah and tzitzit
+const C_KIPPAH = [44, 78, 160], C_KIPPAH_RIM = [28, 46, 108], C_TZITZIT = [246, 243, 232];
+// a round knitted cap: a white band of stitches around a blue crown, raised in two steps over the hair
+Tex.def('pl_kippah', (p, r) => {
+  p.clear();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const d = Math.hypot(x - 7.5, y - 7.5), ang = Math.atan2(y - 7.5, x - 7.5);
+    if (d > 7.7) continue;
+    let c = C_KIPPAH;
+    if (d > 6.7) c = C_KIPPAH_RIM;
+    else if (d > 4.6 && d < 6) c = ((Math.floor((ang + Math.PI) / (Math.PI * 2) * 16) & 1) ? [240, 240, 246] : [96, 140, 214]);
+    p.set(x, y, sh(c, 0.9 + r() * 0.14 + ((x + y) & 1 ? 0.04 : -0.04)));
+  }
+});
+Tex.def('pl_kippah_crown', (p, r) => {
+  p.clear();
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const d = Math.hypot(x - 7.5, y - 7.5);
+    if (d < 7.7) p.set(x, y, sh(d < 2.2 ? sh(C_KIPPAH, 1.35) : (d > 5.2 && d < 6.4 ? [240, 240, 246] : C_KIPPAH), 0.9 + r() * 0.14));
+  }
+});
+Tex.def('pl_kippah_rim', (p, r) => {   // the edge seen from the side: blue, with a line of white stitches
+  p.clear();
+  for (let y = 0; y < 16; y++) for (let x = 2; x < 14; x++) p.set(x, y, (y > 4 && y < 10 && (x & 1)) ? [236, 236, 244] : sh(C_KIPPAH, 0.88 + r() * 0.16));
+});
+Tex.def('pl_tzitzit', (p, r) => {   // strands with the wound knots near the top, ends a little ragged
+  p.clear();
+  for (let x = 0; x < 16; x++) {
+    const end = 16 - ((x * 7 + 3) % 3);
+    for (let y = 0; y < end; y++) p.set(x, y, sh(C_TZITZIT, (x & 1 ? 1 : 0.92) + r() * 0.05));
+  }
+  for (const ky of [0, 2, 4, 6]) for (let x = 0; x < 16; x++) p.set(x, ky, sh(C_TZITZIT, 0.78 + r() * 0.05));
+});
 Tex.def('dr_fire', (p, r) => { for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, mixc([255, 240, 150], [255, 110, 30], clamp(Math.hypot(x - 7.5, y - 7.5) / 9 + r() * 0.2, 0, 1))); });
 Tex.def('mc_pack', (p, r) => {
   for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
@@ -11823,6 +11856,18 @@ class Player {
       for (const s of [-1, 1]) parts.push({ px: s * 0.06, py: 1.36, pz: 0.15, ox: s * (0.2 + 0.4 * k), oy: -0.42 + 0.14 * k, oz: 0, sx: 0.42 + 0.5 * k, sy: 0.9 - 0.2 * k, sz: 0.04,
         layers: [wg, wg, wg, wg, wg, wg], rx: 0.12 * (1 - k), ry: s * 0.55 * (1 - k), rz: s * -0.12 * (1 - k), glint: !!a[1].ench });
     }
+    // v3.1: a knitted kippah on the crown, a little toward the back of the head…
+    const kp = L('pl_kippah'), kc = L('pl_kippah_crown'), kr = L('pl_kippah_rim');
+    parts.push(P(0, 1.44 + ldy, ldz, 0, 0.457, 0.075, 0.3, 0.034, 0.3, [kr, kr, kp, CL, kr, kr], this.pitch));
+    parts.push(P(0, 1.44 + ldy, ldz, 0, 0.484, 0.075, 0.17, 0.026, 0.17, [kr, kr, kc, CL, kr, kr], this.pitch));
+    // …and tzitzit: two strands at each of the four corners, out from under the shirt at the hips,
+    // swinging with the leg beside them and flaring out a little as you run
+    const tz = L('pl_tzitzit'), flare = 0.04 + speed * 0.1;
+    for (const s of [-1, 1]) for (const cz of [-0.16, 0.16]) for (const k of [-1, 1]) {
+      const legRx = this.riding ? 0.25 : (s > 0 ? walk : -walk);
+      parts.push({ px: s * 0.2 + k * 0.017, py: 0.8 + ldy * 0.2, pz: cz + ldz * 0.15, ox: 0, oy: -0.22, oz: 0, sx: 0.032, sy: 0.44 + k * 0.025, sz: 0.026,
+        layers: [tz, tz, CL, tz, tz, tz], rx: legRx * 0.95 + lean * 0.3, ry: 0, rz: s * (this.riding ? 0.5 : flare + k * 0.025) });
+    }
     const shine = (s, n) => { if (s && s.ench) for (let i = parts.length - n; i < parts.length; i++) parts[i].glint = true; };
     if (a[0]) { const t = T(0), hf = L('ar_' + ITEMS[a[0].id].armor.tier + '_helm'); parts.push(P(0, 1.44 + ldy, ldz, 0, 0.23, 0, 0.5, 0.5, 0.5, [t, t, t, CL, t, hf], this.pitch)); shine(a[0], 1); }
     if (a[1] && !wings) {
@@ -14861,6 +14906,10 @@ class UI {
     T('pl_shirt', 32, 20, 16, 24);
     T('pl_arm', 24, 20, 8, 24); T('pl_arm', 48, 20, 8, 24);
     T('pl_face', 32, 4, 16, 16);
+    // v3.1: the kippah peeking over the crown, and tzitzit hanging at the hips
+    const px = (col, x, y, w, h) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+    px('#1c2e6c', 37, 2, 6, 1); px('#2c4ea0', 36, 3, 8, 1);
+    for (let x = 37; x < 43; x += 2) px('#eef0f6', x, 3, 1, 1);
     const t = (i) => 'ar_' + ITEMS[a[i].id].armor.tier;
     if (a[1] && a[1].id === I.wings) { g.globalCompositeOperation = 'destination-over'; T('i_wings', 8, 14, 64, 40); g.globalCompositeOperation = 'source-over'; }
     if (a[2]) { T(t(2), 30, 40, 20, 6); T(t(2), 30, 44, 10, 16); T(t(2), 40, 44, 10, 16); }
@@ -14868,6 +14917,10 @@ class UI {
     if (a[1] && a[1].id !== I.wings) { T(t(1), 30, 20, 20, 20); T(t(1), 22, 20, 10, 10); T(t(1), 48, 20, 10, 10); }
     if (a[0]) { T(t(0), 30, 2, 20, 6); T(t(0), 30, 8, 4, 10); T(t(0), 46, 8, 4, 10); }
     if (a[4] && a[4].id === I.shield) T('i_shield', 12, 24, 18, 22);
+    for (const sx of [33, 35, 44, 46]) {   // the tzitzit hang outside whatever is worn
+      px('#f4f0e4', sx, 41, 1, 16 + (sx & 1));
+      for (const ky of [42, 44, 46]) px('#bdb6a4', sx, ky, 1, 1);
+    }
   }
   renderInventory() {
     const inv = this.game.player.inventory, chest = this.chest, work = this.work;
