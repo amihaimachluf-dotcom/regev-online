@@ -6,7 +6,13 @@
   if (!name) { name = (prompt('שם שחקן (Player name):') || '').trim() || ('שחקן' + Math.floor(Math.random() * 1000)); }
   name = name.slice(0, 16); try { localStorage.setItem('mp_name', name); } catch (e) {}
   const MP = window.__mp = { room, name, socket: null, connected: false, isHost: false, hostId: null, roomSeed: null, ghosts: new Map(),
-    pending: [], out: [], local: 0, sim: 0, applying: false, swapping: 0, lastEnv: null, envApplied: false, proxies: new Map(), rideMap: new Map(), noSpawn: 0, fxIn: false, nidN: 0, chestLast: {} };
+    pending: [], out: [], home: null, paints: {}, paintsDirty: false, local: 0, sim: 0, applying: false, swapping: 0, lastEnv: null, envApplied: false, proxies: new Map(), rideMap: new Map(), noSpawn: 0, fxIn: false, nidN: 0, chestLast: {} };
+  // v3.3: teams (a colour on the name tag; team-mates can't hurt each other) travel with the player's look
+  const TEAMS = ['', 'red', 'blue', 'green', 'yellow', 'purple', 'orange'];
+  const TEAM_BG = { red: 'rgba(200,40,40,.78)', blue: 'rgba(40,90,210,.78)', green: 'rgba(40,150,60,.78)', yellow: 'rgba(200,160,20,.85)', purple: 'rgba(130,60,190,.78)', orange: 'rgba(220,110,30,.82)' };
+  const teamOf = (sk) => (sk && TEAMS.includes(sk.team) ? sk.team : '');
+  try { MP.team = teamOf({ team: localStorage.getItem('regev_team') || '' }); } catch (e) { MP.team = ''; }
+  const skinOut = () => { const raw = window.__skin ? window.__skin.local() : null; return Object.assign({}, raw || { base: 'default' }, { team: MP.team || '' }); };
   const online = () => MP.connected;
   const hostSim = () => !MP.connected || MP.isHost;   // run the simulation locally?
 
@@ -22,28 +28,54 @@
     hud.style.cssText = 'position:fixed;top:4px;left:4px;z-index:9999;font:12px sans-serif;color:#fff;background:rgba(0,0,0,.45);padding:3px 6px;border-radius:4px;pointer-events:none;direction:ltr';
     hud.id = 'mpHud'; document.body.appendChild(hud);
     const labels = document.createElement('div'); labels.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9998'; document.body.appendChild(labels);
-    const setHud = () => { hud.textContent = MP.connected ? `Online · room "${room}" · ${MP.ghosts.size + 1} players${MP.isHost ? ' · host' : ''}` : 'Offline (single-player)'; };
+    // v3.4: אבונדאלהקהקה (creative) worlds live in a room of their own, next to the survival one
+    let curRoom = room;
+    const roomFor = (mode) => (mode === 'creative' ? room.slice(0, 28) + '~cr' : room);
+    const roomLabel = () => (curRoom === room ? room : room + ' ✨');
+    const setHud = () => { hud.textContent = MP.connected ? `Online · room "${roomLabel()}" · ${MP.ghosts.size + 1} players${MP.isHost ? ' · host' : ''}` : 'Offline (single-player)'; };
     setHud();
 
     // ---------- connection ----------
-    s.on('connect', () => { MP.connected = true; s.emit('join', { room, name }); setHud(); });
+    s.on('connect', () => { MP.connected = true; s.emit('join', { room: curRoom, name, skin: skinOut() }); setHud(); });
+    window.__mpRoomMode = (mode) => {
+      const want = roomFor(mode);
+      if (want === curRoom || game.world) return;   // switch only from the menu, before a world is open
+      curRoom = want;
+      for (const [id, g] of [...MP.ghosts]) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); if (window.__skin) window.__skin.release(id); }
+      MP.roomSeed = null; MP.pending.length = 0; MP.home = null; MP.paints = {}; MP.paintsDirty = true; MP.lastEnv = null; MP.envApplied = false;
+      if (MP.sleepers) MP.sleepers.clear();
+      MP.isHost = false; MP.hostId = null;
+      if (MP.connected) { s.emit('leave'); s.emit('join', { room: curRoom, name, skin: skinOut() }); }
+      setHud();
+    };
     s.on('disconnect', () => { MP.connected = false; becomeHost(false, true); setHud(); });
     s.on('full', () => { hud.textContent = 'Room full (max 10) – single-player'; s.disconnect(); });
     s.on('joined', (d) => {
       MP.roomSeed = d.seed; MP.pending.push(...d.edits);
+      // after a reconnect: forget players who left meanwhile, and refresh the looks of those still here
+      const here = new Set(d.players.map((p) => p.id));
+      for (const [id, g] of [...MP.ghosts]) if (!here.has(id)) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); if (window.__skin) window.__skin.release(id); }
+      for (const p of d.players) { const g = MP.ghosts.get(p.id); if (g) { g.team = teamOf(p.skin); if (window.__skin) try { window.__skin.apply(g.e, p.skin, p.id); } catch (e) {} } }
       for (const p of d.players) addGhost(p);
       for (const k in d.chests || {}) applyChest(+k, d.chests[k]);
       if (d.env) { MP.lastEnv = d.env; MP.envApplied = false; }
+      MP.home = d.home || null; MP.paints = d.paints || {}; MP.paintsDirty = true;
       if (game.world && d.seed == null) s.emit('world', { seed: game.world.seed });
       setHost(d.host); setHud();
     });
     s.on('host', (d) => { if (d.env) MP.lastEnv = d.env; setHost(d.id); setHud(); });
     s.on('seed', (seed) => { if (MP.roomSeed == null) MP.roomSeed = seed; });
     s.on('pjoin', (p) => { addGhost(p); setHud(); game.ui && game.ui.toast && game.ui.toast(p.name + ' הצטרף/ה'); });
-    s.on('pleave', (id) => { const g = MP.ghosts.get(id); if (g) { g.label.remove(); MP.ghosts.delete(id); } setHud(); });
+    s.on('pleave', (id) => { const g = MP.ghosts.get(id); if (g) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); } if (window.__skin) window.__skin.release(id); setHud(); });
+    // v3.3: every player's chosen look
+    s.on('skin', (d) => { const g = d && MP.ghosts.get(d.id); if (!g) return; g.team = teamOf(d.skin); if (window.__skin) try { window.__skin.apply(g.e, d.skin, d.id); } catch (e) {} });
+    MP.sendSkin = () => { if (MP.connected) s.emit('skin', skinOut()); };
     s.on('state', (d) => { const g = MP.ghosts.get(d.id); if (g) Object.assign(g.t, d); });
     s.on('edits', (arr) => { for (const e of arr) MP.pending.push(e); });
     s.on('chest', (d) => applyChest(d.k, d.arr));
+    s.on('paint', (d) => { if (d && d.slot >= 0) { MP.paints[d.slot] = d.data; MP.paintsDirty = true; } });
+    MP.paint = (slot, data) => { if (online()) { MP.paints[slot] = data; s.emit('paint', { slot, data }); } };
+    s.on('home', (h) => { MP.home = h; game.ui && game.ui.toast && h && game.ui.toast('בית משותף נקבע' + (h.by ? ' על ידי ' + h.by : ''), 2.5); });
     s.on('env', (d) => { MP.lastEnv = d; if (!MP.isHost) applyEnv(d); });
     s.on('snap', onSnap);
     s.on('relay', onRelay);
@@ -73,12 +105,17 @@
         vx: 0, vy: 0, vz: 0, hw: 0.3, h: 1.8, eye: 1.62, bobPhase: 0, bobAmount: 0, swingTime: 0, swingDur: 0.28, swingKind: 'hit', sneaking: false, eatT: 0, bowCharge: 0,
         riding: null, effects: {}, hurtTime: 0, invuln: 0, dead: false, health: 20, maxHealth: 20, onGround: true, inWater: false, headInWater: false, air: 10, food: 20, spawn: { x: 0, y: 80, z: 0 },
         inventory: { armor: [null, null, null, null, null], held: null, slots: [], add(iid, n, dur) { relay(id, { t: 'give', id: iid, n, dur }); return 0; }, consumeHeld() {}, wearHeld() {}, count() { return 0; }, has() { return false; }, on() {} } });
-      e.hurt = function (amt, sx, sz, src, cause) { if (this.dead || amt <= 0 || this.invuln > 0) return; this.invuln = 0.5; this.hurtTime = 0.3; relay(id, { t: 'hurt', amt, sx, sz, cause: cause || null }); };
-      e.damage = function (amt, sx, sz, knock) { if (this.dead || this.invuln > 0) return false; this.invuln = 0.45; this.hurtTime = 0.3; relay(id, { t: 'hurt', amt, sx, sz, cause: 'player', knock }); return true; };
+      const mate = () => { const g = MP.ghosts.get(id); return !!(MP.team && g && g.team === MP.team); };
+      e.hurt = function (amt, sx, sz, src, cause) { if (this.dead || amt <= 0 || this.invuln > 0 || mate()) return; this.invuln = 0.5; this.hurtTime = 0.3; relay(id, { t: 'hurt', amt, sx, sz, cause: cause || null }); };
+      e.damage = function (amt, sx, sz, knock) { if (this.dead || this.invuln > 0) return false; if (mate()) { try { game.ui.toast('זה חבר בקבוצה שלך', 1.2); } catch (er) {} return false; } this.invuln = 0.45; this.hurtTime = 0.3; relay(id, { t: 'hurt', amt, sx, sz, cause: 'player', knock }); return true; };
       const label = document.createElement('div');
       label.style.cssText = 'position:absolute;transform:translate(-50%,-100%);font:bold 13px sans-serif;color:#fff;background:rgba(0,0,0,.5);padding:1px 5px;border-radius:3px;white-space:nowrap;display:none;direction:rtl';
       labels.appendChild(label);
-      MP.ghosts.set(id, { e, t: Object.assign({}, p), label, name: p.name });
+      if (window.__skin) try { window.__skin.apply(e, p.skin, id); } catch (er) {}
+      const bub = document.createElement('div');
+      bub.style.cssText = 'position:absolute;transform:translate(-50%,-100%);font:28px sans-serif;display:none;pointer-events:none;filter:drop-shadow(0 2px 2px rgba(0,0,0,.5))';
+      labels.appendChild(bub);
+      MP.ghosts.set(id, { e, t: Object.assign({}, p), label, bub, name: p.name, team: teamOf(p.skin) });
     }
     const liveGhosts = () => [...MP.ghosts.values()].map((g) => g.e).filter((e) => e.y > -500 && !e.dead && isFinite(e.x) && e.world === game.world);
 
@@ -86,10 +123,10 @@
     const origStart = Game.prototype.startWorld;
     Game.prototype.startWorld = function (meta, mods, isNew) {
       if (MP.connected && MP.roomSeed != null && meta.seed !== MP.roomSeed) {
-        meta = Object.assign({}, meta, { id: uid(), name: (meta.name || 'world') + ' [' + room + ']', seed: MP.roomSeed, seedText: String(MP.roomSeed), player: null, containers: null, signs: null, mapdata: null, waypoints: null });
+        meta = Object.assign({}, meta, { id: uid(), name: (meta.name || 'world') + ' [' + roomLabel() + ']', seed: MP.roomSeed, seedText: String(MP.roomSeed), player: null, containers: null, signs: null, mapdata: null, waypoints: null });
         mods = {}; isNew = true;
       }
-      MP.proxies.clear(); MP.envApplied = false;
+      MP.proxies.clear(); MP.envApplied = false; MP.paintsDirty = true;
       const r = origStart.call(this, meta, mods, isNew);
       if (MP.connected && MP.roomSeed == null) { MP.roomSeed = meta.seed; s.emit('world', { seed: meta.seed }); }
       return r;
@@ -348,6 +385,7 @@
         }
         rl.sort((a, b) => a.d - b.d); if (game.renderer) game.renderer.remoteLights = rl.slice(0, 10); }
       MP.rideMap = new Map(); for (const g of MP.ghosts.values()) if (g.t.ride && g.t.ride.nid) MP.rideMap.set(g.t.ride.nid, g);
+      if (MP.paintsDirty && game.state === 'playing') { MP.paintsDirty = false; for (const k in MP.paints) { try { game.setPainting(+k, MP.paints[k], true); } catch (e) {} } }
       if (MP.chestQ) { const q = MP.chestQ; MP.chestQ = null; for (const k in q) applyChest(+k, q[k]); }
       if (MP.lastEnv && !MP.envApplied) { applyEnv(MP.lastEnv, MP.isHost); MP.envApplied = true; }
       if (MP.pending.length && (!MP.roomSeed || w.seed === MP.roomSeed)) {
@@ -363,7 +401,7 @@
       for (const g of MP.ghosts.values()) {
         const e = g.e, t = g.t, k = Math.min(1, dt * 12);
         e.world = w; if (e.invuln > 0) e.invuln -= dt; if (e.hurtTime > 0) e.hurtTime -= dt;
-        if (!isFinite(t.x) || !isFinite(t.y) || !isFinite(t.z)) { g.label.style.display = 'none'; continue; }
+        if (!isFinite(t.x) || !isFinite(t.y) || !isFinite(t.z)) { g.label.style.display = 'none'; if (g.bub) g.bub.style.display = 'none'; continue; }
         const ox = e.x, oz = e.z;
         if (e.y < -500) { e.x = t.x; e.y = t.y; e.z = t.z; }
         e.x += (t.x - e.x) * k; e.y += (t.y - e.y) * k; e.z += (t.z - e.z) * k;
@@ -373,9 +411,12 @@
         e.sneaking = !!t.sn; e.swingTime = t.sw ? 0.14 : 0; e.dead = !!t.dead; if (isFinite(t.hp)) e.health = t.hp;
         const txt = g.name + '  ❤' + (isFinite(t.hp) ? t.hp : 20) + (t.dead ? ' ☠' : ''); if (g.label.textContent !== txt) g.label.textContent = txt;
         const d = [e.x - cam.x, e.y + 2.1 - cam.y, e.z - cam.z], zc = d[0] * fw[0] + d[1] * fw[1] + d[2] * fw[2];
-        if (zc < 0.2 || zc > 120) { g.label.style.display = 'none'; continue; }
+        if (zc < 0.2 || zc > 120) { g.label.style.display = 'none'; if (g.bub) g.bub.style.display = 'none'; continue; }
         const xc = d[0] * rt[0] + d[1] * rt[1] + d[2] * rt[2], yc = d[0] * up[0] + d[1] * up[1] + d[2] * up[2];
-        g.label.style.display = 'block'; g.label.style.left = (W / 2 + xc / zc * f * H / 2) + 'px'; g.label.style.top = (H / 2 - yc / zc * f * H / 2) + 'px';
+        const lx = (W / 2 + xc / zc * f * H / 2) + 'px', ly = (H / 2 - yc / zc * f * H / 2);
+        g.label.style.display = 'block'; g.label.style.left = lx; g.label.style.top = ly + 'px';
+        const bg = g.team ? TEAM_BG[g.team] : 'rgba(0,0,0,.5)'; if (g.label.style.background !== bg) g.label.style.background = bg;
+        if (g.bub) { const on = g.emo && performance.now() < g.emoT; g.bub.style.display = on ? 'block' : 'none'; if (on) { if (g.bub.textContent !== g.emo) g.bub.textContent = g.emo; g.bub.style.left = lx; g.bub.style.top = (ly - 20) + 'px'; } }
       }
     }
     requestAnimationFrame(tick);
@@ -539,7 +580,211 @@
       if (m.t === 'interact') hostInteract(m);
       else if (m.t === 'trade') hostTrade(m);
     });
+    // other players and the shared home on the map
+    game.mapExtras = () => {
+      const out = [];
+      if (MP.home) out.push({ x: MP.home.x + 0.5, z: MP.home.z + 0.5, name: 'בית משותף', color: '#ffb347', glyph: '⌂' });
+      for (const g of MP.ghosts.values()) { const e = g.e; if (e.y > -500 && isFinite(e.x)) out.push({ x: e.x, z: e.z, name: g.name, color: '#7ad0ff' }); }
+      return out;
+    };
+    setInterval(() => { if (game.state === 'map' && game.ui && game.ui.mapView) { try { game.ui.drawMap(); } catch (e) {} } }, 800);
     setInterval(() => { if (MP.signQ && game.world) { const q = MP.signQ; MP.signQ = null; q.forEach(applySign); } }, 500);
+
+    // ---- v3.2: chat + quick messages (relayed one-to-one through the server's existing 'relay' event) ----
+    const QUICK = ['שלום! 👋', 'תודה 🙏', 'עזרה!', 'בוא אליי', 'יפה! 👍', 'תיזהר!', 'קדימה', 'אני בונה 🔨', 'מצאתי יהלומים 💎', 'חכה לי', 'נתראה', '😂', 'איפה אתה? 📍', 'אני בדרך', 'בוא נבנה ביחד', 'סליחה'];
+    const css = document.createElement('style');
+    css.textContent = '#mpChatBtn{position:fixed;left:4px;top:30px;z-index:9999;width:38px;height:30px;border-radius:6px;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.5);color:#fff;font-size:17px;line-height:28px;text-align:center;display:none;touch-action:manipulation;cursor:pointer;user-select:none}'
+      + '#mpChatLog{position:fixed;left:4px;top:66px;z-index:9997;max-width:46vw;pointer-events:none;direction:rtl;font:13px sans-serif;color:#fff;display:flex;flex-direction:column;gap:2px;align-items:flex-start}'
+      + '#mpChatLog .wp{pointer-events:auto;margin-inline-start:6px;background:#3b7a3b;color:#fff;border:0;border-radius:4px;padding:1px 6px;font:12px sans-serif;touch-action:manipulation}#mpChatLog div{background:rgba(0,0,0,.5);padding:2px 7px;border-radius:4px;word-break:break-word;text-shadow:0 1px 2px #000}#mpChatLog b{color:#ffd86b}'
+      + '#mpChatPanel{position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;direction:rtl}'
+      + '#mpChatPanel .box{background:#1d2330;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:8px;width:min(440px,94vw);max-height:92vh;overflow:auto;color:#fff;font:14px sans-serif}'
+      + '#mpChatPanel .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}'
+      + '#mpChatPanel button{background:#2c3546;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:6px 3px;font:13px sans-serif;min-height:34px;touch-action:manipulation}'
+      + '#mpChatPanel .row{display:flex;gap:5px;margin-top:6px}#mpChatPanel input{flex:1;min-width:0;background:#10141c;color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:6px;font:16px sans-serif;direction:rtl}'
+      + '#mpChatPanel .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}';
+    document.head.appendChild(css);
+    const btn = document.createElement('div'); btn.id = 'mpChatBtn'; btn.textContent = '💬'; btn.setAttribute('aria-label', "צ'אט"); document.body.appendChild(btn);
+    const log = document.createElement('div'); log.id = 'mpChatLog'; document.body.appendChild(log);
+    const panel = document.createElement('div'); panel.id = 'mpChatPanel';
+    panel.innerHTML = '<div class="box"><div class="hd"><b>הודעה מהירה</b><button type="button" id="mpChatX" style="min-height:28px">✕</button></div><div class="grid"></div><div class="row"><button type="button" id="mpChatLoc" style="flex:1">📍 שלח מיקום</button><button type="button" id="mpHomeSet" style="flex:1">🏠 קבע בית משותף</button><button type="button" id="mpHomeGo" style="flex:1">🏠 חזור לבית</button></div><div class="row"><button type="button" id="mpShare" style="flex:1">🔗 קישור לחדר</button><input id="mpRoomIn" maxlength="32" placeholder="קוד חדר" style="flex:1"><button type="button" id="mpRoomGo">עבור</button></div><div class="row"><input id="mpChatIn" maxlength="80" placeholder="הקלד הודעה…" autocomplete="off"><button type="button" id="mpChatSend">שלח</button></div></div>';
+    document.body.appendChild(panel);
+    const grid = panel.querySelector('.grid'), inp = panel.querySelector('#mpChatIn');
+    let lastSend = 0;
+    function addWaypoint(x, z) {
+      const g = game; if (!g.waypoints) return;
+      if (g.waypoints.some((w) => w.x === x && w.z === z)) { g.ui.toast('המיקום כבר מסומן', 1.6); return; }
+      if (g.waypoints.length >= 12) { g.ui.toast('אפשר עד 12 סימונים במפה', 2.2); return; }
+      const used = new Set(g.waypoints.map((w) => w.c)); let c = 0; while (used.has(c) && c < 7) c++;
+      let n = 1; while (g.waypoints.some((w) => w.n === n)) n++;
+      g.waypoints.push({ x, z, c, n }); g.ui.toast('סימון ' + n + ' נוסף. הכיוון אליו מופיע בראש המסך', 2.4);
+    }
+    function addLine(name, text, loc) {
+      const d = document.createElement('div'), b = document.createElement('b');
+      b.textContent = name + ': '; d.appendChild(b); d.appendChild(document.createTextNode(text));
+      if (loc) {
+        const wp = document.createElement('button'); wp.type = 'button'; wp.className = 'wp'; wp.textContent = 'סמן במפה';
+        const act = (e) => { e.stopPropagation(); e.preventDefault(); addWaypoint(Math.round(loc.x), Math.round(loc.z)); wp.remove(); };
+        wp.addEventListener('click', act); d.appendChild(wp);
+      }
+      log.appendChild(d); while (log.children.length > 6) log.firstChild.remove();
+      setTimeout(() => d.remove(), 12000);
+    }
+    function sendChat(text, loc) {
+      text = String(text || '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, 80); if (!text) return false;
+      const now = performance.now(); if (now - lastSend < 600) return false; lastSend = now;
+      addLine(MP.name, text + (loc ? ' (' + loc.x + ', ' + loc.z + ')' : ''));
+      for (const id of MP.ghosts.keys()) relay(id, { t: 'chat', text, name: MP.name, loc });
+      return true;
+    }
+    function sendLocation() {
+      const p = game.player; if (!p || !isFinite(p.x)) return false;
+      const loc = { x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z) };
+      if (sendChat('📍 הנה המיקום שלי', loc)) { closePanel(); return true; }
+      return false;
+    }
+    const closePanel = () => { panel.style.display = 'none'; inp.blur(); };
+    const openPanel = () => { try { if (game.input && game.input.releaseAll) game.input.releaseAll(); } catch (e) {} panel.style.display = 'flex'; };
+    panel.querySelector('#mpChatLoc').addEventListener('click', sendLocation);
+    panel.querySelector('#mpHomeSet').addEventListener('click', () => {
+      const p = game.player; if (!p || !online()) return;
+      s.emit('home', { x: p.x, y: p.y, z: p.z }); sendChat('🏠 קבעתי בית משותף', { x: Math.round(p.x), y: Math.round(p.y), z: Math.round(p.z) }); closePanel();
+    });
+    panel.querySelector('#mpHomeGo').addEventListener('click', () => {
+      const h = MP.home, p = game.player; if (!p) return;
+      if (!h) { game.ui.toast('עדיין לא נקבע בית משותף', 2); return; }
+      closePanel();
+      p.x = h.x + 0.5; p.y = h.y + 0.2; p.z = h.z + 0.5; p.vx = p.vy = p.vz = 0; game.lastPcx = null;
+      let n = 0; const iv = setInterval(() => { if (++n > 40 || !game.world) return clearInterval(iv); if (game.world.isLoaded(Math.floor(p.x), Math.floor(p.z))) { try { game.ensureFree(p); } catch (e) {} return clearInterval(iv); } p.vy = 0; p.y = h.y + 0.2; }, 100);
+      game.ui.toast('חזרת לבית המשותף', 2);
+    });
+    const roomUrl = (r) => location.origin + location.pathname + '?room=' + encodeURIComponent(r);
+    panel.querySelector('#mpShare').addEventListener('click', async () => {
+      const url = roomUrl(room);
+      try { if (navigator.share) { await navigator.share({ title: 'רגב', text: 'בוא לשחק איתי ברגב', url }); return; } } catch (e) { return; }
+      try { await navigator.clipboard.writeText(url); game.ui.toast('הקישור הועתק', 2); } catch (e) { prompt('העתק את הקישור:', url); }
+    });
+    panel.querySelector('#mpRoomGo').addEventListener('click', () => {
+      const r = panel.querySelector('#mpRoomIn').value.trim().replace(/[^\w\u0590-\u05ff-]/g, '').slice(0, 32); if (!r || r === room) return;
+      location.href = roomUrl(r);
+    });
+    for (const q of QUICK) { const b = document.createElement('button'); b.type = 'button'; b.textContent = q; b.addEventListener('click', () => { if (sendChat(q)) closePanel(); }); grid.appendChild(b); }
+    btn.addEventListener('click', (e) => { e.stopPropagation(); openPanel(); });
+    btn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    panel.addEventListener('click', (e) => { if (e.target === panel) closePanel(); });
+    for (const t of ['touchstart', 'touchend', 'pointerdown', 'mousedown']) panel.addEventListener(t, (e) => e.stopPropagation());
+    panel.querySelector('#mpChatX').addEventListener('click', closePanel);
+    const doSend = () => { if (sendChat(inp.value)) { inp.value = ''; closePanel(); } };
+    panel.querySelector('#mpChatSend').addEventListener('click', doSend);
+    for (const t of ['keydown', 'keyup', 'keypress']) inp.addEventListener(t, (e) => { e.stopPropagation(); if (t === 'keydown') { if (e.key === 'Enter') { e.preventDefault(); doSend(); } else if (e.key === 'Escape') closePanel(); } });
+    // ---------- v3.3: emoji above your head, gestures, and teams ----------
+    const EMOJI = ['😀', '😂', '😍', '😎', '😢', '😡', '😮', '🤔', '👍', '👎', '❤️', '🔥', '🎉', '💎', '❓', '💤'];
+    const ACTS = [['wave', '👋 נפנוף'], ['dance', '💃 ריקוד'], ['clap', '👏 מחיאות כפיים'], ['bow', '🙇 קידה']];
+    const TEAM_NAMES = { '': 'בלי', red: 'אדום', blue: 'כחול', green: 'ירוק', yellow: 'צהוב', purple: 'סגול', orange: 'כתום' };
+    const ecss = document.createElement('style');
+    ecss.textContent = '#mpEmoBtn{position:fixed;left:46px;top:30px;z-index:9999;width:38px;height:30px;border-radius:6px;border:1px solid rgba(255,255,255,.35);background:rgba(0,0,0,.5);color:#fff;font-size:17px;line-height:28px;text-align:center;display:none;touch-action:manipulation;cursor:pointer;user-select:none}'
+      + '#mpEmoPanel{position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;direction:rtl}'
+      + '#mpEmoPanel .box{background:#1d2330;border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:8px;width:min(440px,94vw);max-height:92vh;overflow:auto;color:#fff;font:14px sans-serif}'
+      + '#mpEmoPanel .em{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}#mpEmoPanel .em button{font-size:22px;padding:4px 0}'
+      + '#mpEmoPanel .ac{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px}'
+      + '#mpEmoPanel button{background:#2c3546;color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:6px 3px;font:13px sans-serif;min-height:34px;touch-action:manipulation}'
+      + '#mpEmoPanel .tm{display:flex;gap:5px;align-items:center;margin-top:8px;flex-wrap:wrap}#mpEmoPanel .tm button{min-width:44px}#mpEmoPanel .tm button.on{outline:3px solid #ffd86b;outline-offset:1px}'
+      + '#mpEmoPanel .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}#mpMyEmo{position:fixed;left:50%;top:22%;transform:translateX(-50%);font-size:46px;z-index:9998;pointer-events:none;display:none;filter:drop-shadow(0 3px 3px rgba(0,0,0,.5))}';
+    document.head.appendChild(ecss);
+    const ebtn = document.createElement('div'); ebtn.id = 'mpEmoBtn'; ebtn.textContent = '😀'; ebtn.setAttribute('aria-label', 'רגשונים ותנועות'); document.body.appendChild(ebtn);
+    const myEmo = document.createElement('div'); myEmo.id = 'mpMyEmo'; document.body.appendChild(myEmo);
+    const epan = document.createElement('div'); epan.id = 'mpEmoPanel';
+    epan.innerHTML = '<div class="box"><div class="hd"><b>רגשונים ותנועות</b><button type="button" class="x" style="min-height:28px">✕</button></div><div class="em"></div><div class="ac"></div><div class="tm"><b>קבוצה:</b></div><small style="opacity:.7;display:block;margin-top:5px">חברים באותה קבוצה לא יכולים לפגוע זה בזה</small></div>';
+    document.body.appendChild(epan);
+    let lastEmo = 0, myEmoT = 0;
+    const closeE = () => { epan.style.display = 'none'; };
+    const sendEmote = (m) => {
+      const now = performance.now(); if (now - lastEmo < 700) return false; lastEmo = now;
+      for (const id of MP.ghosts.keys()) relay(id, Object.assign({ t: 'emote' }, m));
+      const p = game.player;
+      if (m.a && p) p.emote = { k: m.a, t0: now / 1000 };
+      if (m.e) { myEmo.textContent = m.e; myEmo.style.display = 'block'; clearTimeout(myEmoT); myEmoT = setTimeout(() => { myEmo.style.display = 'none'; }, 1800); }
+      return true;
+    };
+    for (const em of EMOJI) { const b = document.createElement('button'); b.type = 'button'; b.textContent = em; b.addEventListener('click', () => { if (sendEmote({ e: em })) closeE(); }); epan.querySelector('.em').appendChild(b); }
+    for (const [k, txt] of ACTS) { const b = document.createElement('button'); b.type = 'button'; b.textContent = txt; b.addEventListener('click', () => { if (sendEmote({ a: k })) { closeE(); if (game.cameraMode === 0) game.ui.toast('עברו למבט מגוף שלישי כדי לראות את עצמכם', 2); } }); epan.querySelector('.ac').appendChild(b); }
+    const drawTeams = () => {
+      const tm = epan.querySelector('.tm'); while (tm.children.length > 1) tm.lastChild.remove();
+      for (const c of TEAMS) {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = TEAM_NAMES[c];
+        if (c) b.style.background = TEAM_BG[c];
+        if (c === (MP.team || '')) b.className = 'on';
+        b.addEventListener('click', () => { MP.team = c; try { localStorage.setItem('regev_team', c); } catch (e) {} if (online()) s.emit('skin', skinOut()); drawTeams(); game.ui.toast(c ? 'הצטרפת לקבוצה ה' + TEAM_NAMES[c] + 'ה' : 'יצאת מהקבוצה', 1.6); });
+        tm.appendChild(b);
+      }
+    };
+    drawTeams();
+    ebtn.addEventListener('click', (e) => { e.stopPropagation(); try { game.input.releaseAll(); } catch (er) {} drawTeams(); epan.style.display = 'flex'; });
+    ebtn.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+    epan.addEventListener('click', (e) => { if (e.target === epan) closeE(); });
+    for (const t of ['touchstart', 'touchend', 'pointerdown', 'mousedown']) epan.addEventListener(t, (e) => e.stopPropagation());
+    epan.querySelector('.x').addEventListener('click', closeE);
+    s.on('relay', (m) => {
+      if (!m || m.t !== 'emote') return;
+      const g = MP.ghosts.get(m.from); if (!g) return;
+      if (typeof m.e === 'string' && EMOJI.includes(m.e)) { g.emo = m.e; g.emoT = performance.now() + 4000; }
+      if (typeof m.a === 'string' && ACTS.some((x) => x[0] === m.a)) g.e.emote = { k: m.a, t0: performance.now() / 1000 };
+    });
+    setInterval(() => { ebtn.style.display = (MP.connected && game.world && (game.state === 'playing' || game.state === 'paused')) ? 'block' : 'none'; }, 500);
+    // ---------- sleeping together: the night passes once every player is in bed ----------
+    MP.sleepers = new Set(); MP.sleeping = false;
+    const sleepUi = document.createElement('div');
+    sleepUi.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(5,8,20,.82);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#fff;font:20px sans-serif;direction:rtl;text-align:center;padding:16px';
+    sleepUi.innerHTML = '<div id="mpSleepTxt"></div><button id="mpSleepWake" type="button" style="background:#2c3546;color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:10px 18px;font:16px sans-serif">קום מהמיטה</button>';
+    document.body.appendChild(sleepUi);
+    const sleepTxt = sleepUi.querySelector('#mpSleepTxt');
+    for (const t of ['touchstart', 'touchend', 'pointerdown', 'mousedown', 'keydown']) sleepUi.addEventListener(t, (e) => e.stopPropagation());
+    const sleepBroadcast = (on) => { for (const id of MP.ghosts.keys()) relay(id, { t: 'sleep', on }); };
+    const sleepCounts = () => { let n = MP.sleeping ? 1 : 0; for (const id of MP.ghosts.keys()) if (MP.sleepers.has(id)) n++; return [n, MP.ghosts.size + 1]; };
+    function wake(morning) {
+      if (!MP.sleeping) return;
+      MP.sleeping = false; sleepUi.style.display = 'none'; sleepBroadcast(false);
+      const p = game.player;
+      if (morning && p && !p.dead) { p.health = p.maxHealth; try { game.ui.refreshStatus(); game.ui.showTitle('יום ' + game.day, 'בוקר טוב'); game.achieve('night'); } catch (e) {} }
+    }
+    sleepUi.querySelector('#mpSleepWake').addEventListener('click', () => wake(false));
+    const origSleep = Game.prototype.trySleep;
+    Game.prototype.trySleep = function (t) {
+      if (!online() || !MP.ghosts.size) return origSleep.call(this, t);
+      const before = this.sleepT || 0;
+      origSleep.call(this, t);
+      if (this.sleepT > 0 && this.sleepT !== before) {   // the bed took us: wait for the others instead of skipping alone
+        this.sleepT = 0; this.slept = true; try { this.ui.fade(false); } catch (e) {}
+        MP.sleeping = true; MP.sleepDay = this.day; MP.sleepHp = this.player.health;
+        try { this.input.releaseAll(); } catch (e) {}
+        sleepUi.style.display = 'flex'; sleepBroadcast(true);
+      }
+    };
+    s.on('relay', (m) => { if (m && m.t === 'sleep') { if (m.on) MP.sleepers.add(m.from); else MP.sleepers.delete(m.from); } });
+    setInterval(() => {
+      if (!MP.sleeping) return;
+      const p = game.player;
+      if (!game.world || !p || p.dead || game.state !== 'playing' || !online() || p.health < MP.sleepHp) { wake(false); return; }
+      p.vx = p.vz = 0;
+      const [n, tot] = sleepCounts();
+      sleepTxt.innerHTML = '😴 ' + n + ' מתוך ' + tot + ' במיטה<br><small>הלילה יעבור כשכל השחקנים ישנים</small>';
+      if (game.day > MP.sleepDay) { wake(true); return; }
+      if (game.daylight > 0.35) { wake(false); return; }
+      if (MP.isHost && n >= tot) {   // everyone is in bed: it is morning
+        game.timeOfDay = 0.01; game.day++; game.weather.target = 0; game.weather.rain = 0;
+        try { s.emit('env', envNow()); } catch (e) {}
+        wake(true); try { game.save('sleep'); } catch (e) {}
+      }
+    }, 400);
+    s.on('relay', (m) => {
+      if (!m || m.t !== 'chat' || typeof m.text !== 'string') return;
+      const gh = MP.ghosts.get(m.from), name = (gh && gh.name) || String(m.name || '?').slice(0, 16);
+      let text = m.text.replace(/[\u0000-\u001f]/g, ' ').slice(0, 80), loc = null;
+      const L = m.loc, me = game.player;
+      if (L && isFinite(L.x) && isFinite(L.z) && me) { loc = { x: +L.x, z: +L.z }; text += ' (' + Math.round(L.x) + ', ' + Math.round(L.z) + ') · ' + Math.round(Math.hypot(me.x - L.x, me.z - L.z)) + ' מטר ממך'; }
+      addLine(name, text, loc);
+      try { game.input && game.input.haptic && game.input.haptic(25); } catch (e) {}
+    });
+    setInterval(() => { btn.style.display = (MP.connected && game.world && (game.state === 'playing' || game.state === 'paused')) ? 'block' : 'none'; if (btn.style.display === 'none') { log.style.display = 'none'; } else log.style.display = 'flex'; }, 500);
   }
 
   if (document.readyState === 'complete') setTimeout(boot, 0); else addEventListener('load', () => setTimeout(boot, 0));
