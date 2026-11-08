@@ -8,10 +8,10 @@ const server = http.createServer(app), io = new Server(server, { cors: { origin:
 
 const rooms = new Map(); // code -> { seed, edits: Map, chests: Map, env, players: Map, host }
 let dirty = false;
-function newRoom() { return { seed: null, edits: new Map(), chests: new Map(), signs: new Map(), env: null, players: new Map(), host: null }; }
+function newRoom() { return { seed: null, edits: new Map(), chests: new Map(), signs: new Map(), paints: new Map(), home: null, env: null, players: new Map(), host: null }; }
 try {
   const j = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-  for (const code in j) { const r = newRoom(), o = j[code]; r.seed = o.seed; r.env = o.env || null;
+  for (const code in j) { const r = newRoom(), o = j[code]; r.seed = o.seed; r.env = o.env || null; r.home = o.home || null; for (const k in o.paints || {}) r.paints.set(+k, o.paints[k]);
     for (const e of o.edits || []) r.edits.set(e.x + ',' + e.y + ',' + e.z, e);
     for (const k in o.chests || {}) r.chests.set(+k, o.chests[k]); for (const v of o.signs || []) r.signs.set(v.x + ',' + v.y + ',' + v.z, v); rooms.set(code, r); }
   console.log('loaded', rooms.size, 'rooms from', DATA_FILE);
@@ -19,7 +19,7 @@ try {
 function save() {
   if (!dirty) return; dirty = false;
   const out = {};
-  for (const [code, r] of rooms) if (r.seed != null || r.edits.size || r.chests.size) out[code] = { seed: r.seed, env: r.env, edits: [...r.edits.values()], chests: Object.fromEntries(r.chests), signs: [...r.signs.values()] };
+  for (const [code, r] of rooms) if (r.seed != null || r.edits.size || r.chests.size) out[code] = { seed: r.seed, env: r.env, edits: [...r.edits.values()], chests: Object.fromEntries(r.chests), signs: [...r.signs.values()], home: r.home, paints: Object.fromEntries(r.paints) };
   try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.writeFileSync(DATA_FILE + '.tmp', JSON.stringify(out)); fs.renameSync(DATA_FILE + '.tmp', DATA_FILE); }
   catch (e) { console.warn('save failed', e.message); }
 }
@@ -27,7 +27,9 @@ setInterval(save, 20000);
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => { dirty = true; save(); process.exit(0); });
 
 // ---- light anti-cheat: per-socket rate limits ----
-const LIMITS = { state: 40, edits: 40, relay: 120, fx: 30, sign: 5, chestSet: 30, chestGet: 20, snap: 30, env: 5, hb: 10, world: 3 };
+const LIMITS = { leave: 3, skin: 4, state: 40, edits: 40, relay: 120, fx: 30, sign: 5, chestSet: 30, chestGet: 20, snap: 30, env: 5, hb: 10, world: 3, home: 3, paint: 6 };
+// a player's look: a small plain object, checked again by every client before use
+function cleanSkin(v) { try { if (!v || typeof v !== 'object' || Array.isArray(v)) return null; const j = JSON.stringify(v); return j.length <= 800 ? JSON.parse(j) : null; } catch (e) { return null; } }
 function limiter() { const b = {}; return (ev) => { const L = LIMITS[ev]; if (!L) return true; const now = Date.now(), t = b[ev] || (b[ev] = { n: 0, t: now }); if (now - t.t > 1000) { t.n = 0; t.t = now; } return ++t.n <= L; }; }
 const active = (p) => p && Date.now() - p.beat < 3500 && !p.hidden;
 function electHost(r, code) {
@@ -46,22 +48,23 @@ io.on('connection', (s) => {
   const allow = limiter(), on = s.on.bind(s);
   s.on = (ev, fn) => on(ev, (...a) => { if (allow(ev)) { try { fn(...a); } catch (e) { console.warn('handler', ev, e.message); } } });
   const isHost = () => r && r.host === s.id;
-  s.on('join', ({ room, name } = {}) => {
+  s.on('join', ({ room, name, skin } = {}) => {
     if (r) return;
     code = String(room || 'main').slice(0, 32);
     if (!rooms.has(code)) rooms.set(code, newRoom());
     const R = rooms.get(code);
     if (R.players.size >= MAX) return s.emit('full');
-    r = R; const me = { id: s.id, name: String(name || 'player').slice(0, 16), beat: Date.now(), hidden: false };
+    r = R; const me = { id: s.id, name: String(name || 'player').slice(0, 16), beat: Date.now(), hidden: false, skin: cleanSkin(skin) };
     s.join(code);
     const oldHost = r.host;
     if (!r.host || !r.players.has(r.host) || !active(r.players.get(r.host))) r.host = s.id;
-    s.emit('joined', { seed: r.seed, edits: [...r.edits.values()], chests: Object.fromEntries(r.chests), signs: [...r.signs.values()], env: r.env, players: [...r.players.values()], host: r.host });
+    s.emit('joined', { seed: r.seed, edits: [...r.edits.values()], chests: Object.fromEntries(r.chests), signs: [...r.signs.values()], env: r.env, home: r.home, paints: Object.fromEntries(r.paints), players: [...r.players.values()], host: r.host });
     r.players.set(s.id, me); s.to(code).emit('pjoin', me);
     if (oldHost && oldHost !== r.host && r.players.has(oldHost)) io.to(code).emit('host', { id: r.host, env: r.env });
   });
+  s.on('skin', (v) => { if (!r) return; const p = r.players.get(s.id); if (!p) return; p.skin = cleanSkin(v); s.to(code).emit('skin', { id: s.id, skin: p.skin }); });
   s.on('world', ({ seed } = {}) => { if (r && r.seed == null && Number.isFinite(seed)) { r.seed = seed | 0; dirty = true; s.to(code).emit('seed', r.seed); } });
-  s.on('state', (d) => { if (!r || !d) return; const p = r.players.get(s.id); if (![d.x, d.y, d.z].every(Number.isFinite) || Math.abs(d.x) > 3e7 || Math.abs(d.z) > 3e7) return; p.beat = Date.now(); Object.assign(p, { ride: d.ride && Number.isFinite(+d.ride.x) ? { nid: String(d.ride.nid).slice(0, 24), x: +d.ride.x, y: +d.ride.y, z: +d.ride.z, yaw: +d.ride.yaw } : null, rd: !!d.rd, x: +d.x, y: +d.y, z: +d.z, yaw: +d.yaw, pitch: +d.pitch, sn: !!d.sn, sw: !!d.sw, hp: +d.hp, dead: !!d.dead, hl: Math.max(0, Math.min(15, +d.hl || 0)), hi: Number.isInteger(d.hi) ? d.hi : -1, oi: Number.isInteger(d.oi) ? d.oi : -1 }); s.volatile.to(code).emit('state', p); });
+  s.on('state', (d) => { if (!r || !d) return; const p = r.players.get(s.id); if (![d.x, d.y, d.z].every(Number.isFinite) || Math.abs(d.x) > 3e7 || Math.abs(d.z) > 3e7) return; p.beat = Date.now(); Object.assign(p, { ride: d.ride && Number.isFinite(+d.ride.x) ? { nid: String(d.ride.nid).slice(0, 24), x: +d.ride.x, y: +d.ride.y, z: +d.ride.z, yaw: +d.ride.yaw } : null, rd: !!d.rd, x: +d.x, y: +d.y, z: +d.z, yaw: +d.yaw, pitch: +d.pitch, sn: !!d.sn, sw: !!d.sw, hp: +d.hp, dead: !!d.dead, hl: Math.max(0, Math.min(15, +d.hl || 0)), hi: Number.isInteger(d.hi) ? d.hi : -1, oi: Number.isInteger(d.oi) ? d.oi : -1 }); const { skin, ...st } = p; s.volatile.to(code).emit('state', st); });
   s.on('edits', (arr) => {
     if (!r || !Array.isArray(arr)) return; const out = [];
     const me = r.players.get(s.id), host = r.host === s.id, pl = [...r.players.values()].filter((p) => Number.isFinite(p.x));
@@ -82,6 +85,16 @@ io.on('connection', (s) => {
     if (Array.isArray(d.arr) && d.arr.some(Boolean)) r.chests.set(k, d.arr.slice(0, 27)); else r.chests.delete(k);
     dirty = true; s.to(code).emit('chest', { k, arr: Array.isArray(d.arr) ? d.arr : new Array(27).fill(null) });
   });
+  s.on('paint', (d) => {
+    if (!r || !d || !Number.isInteger(d.slot) || d.slot < 0 || d.slot > 31 || typeof d.data !== 'string' || !/^[0-9a-f]{256}$/.test(d.data)) return;
+    r.paints.set(d.slot, d.data); dirty = true; s.to(code).emit('paint', { slot: d.slot, data: d.data });
+  });
+  s.on('home', (d) => {
+    if (!r || !d || ![d.x, d.y, d.z].every(Number.isFinite) || Math.abs(d.x) > 3e7 || Math.abs(d.z) > 3e7 || d.y < -64 || d.y > 400) return;
+    const me = r.players.get(s.id);
+    r.home = { x: Math.round(d.x), y: Math.round(d.y), z: Math.round(d.z), by: me ? me.name : '' }; dirty = true;
+    io.to(code).emit('home', r.home);
+  });
   s.on('env', (d) => { if (isHost() && d) { r.env = d; dirty = true; s.volatile.to(code).emit('env', d); } });
   s.on('hb', (d) => { if (!r) return; const p = r.players.get(s.id); if (p) { p.beat = Date.now(); const was = p.hidden; p.hidden = !!(d && d.hidden); if (p.hidden && !was && r.host === s.id) electHost(r, code); } });
   s.on('sign', (d) => { if (!r || !d) return; const v = { x: d.x | 0, y: d.y | 0, z: d.z | 0, text: String(d.text || '').slice(0, 60) }, me = r.players.get(s.id), k = v.x + ',' + v.y + ',' + v.z;
@@ -94,9 +107,13 @@ io.on('connection', (s) => {
     if (!to || to === s.id || !r.players.has(to)) return;
     m.from = s.id; io.to(to).emit('relay', m);
   });
-  s.on('disconnect', () => {
-    if (!r) return; r.players.delete(s.id); io.to(code).emit('pleave', s.id);
-    if (r.host === s.id) { r.host = null; electHost(r, code); }
-  });
+  // leaving a room (to join another one, e.g. the אבונדאלהקהקה room) or the game
+  const leave = () => {
+    if (!r) return; const R = r, C = code; r = null; code = null;
+    R.players.delete(s.id); s.leave(C); io.to(C).emit('pleave', s.id);
+    if (R.host === s.id) { R.host = null; electHost(R, C); }
+  };
+  s.on('leave', leave);
+  s.on('disconnect', leave);
 });
 server.listen(PORT, () => console.log('listening on ' + PORT));
