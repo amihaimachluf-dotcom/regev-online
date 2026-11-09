@@ -61,10 +61,10 @@
       if (d.env) { MP.lastEnv = d.env; MP.envApplied = false; }
       MP.home = d.home || null; MP.paints = d.paints || {}; MP.paintsDirty = true;
       if (game.world && d.seed == null) s.emit('world', { seed: game.world.seed });
-      setHost(d.host); setHud();
+      setHost(d.host); setHud(); reconcileSeed();
     });
     s.on('host', (d) => { if (d.env) MP.lastEnv = d.env; setHost(d.id); setHud(); });
-    s.on('seed', (seed) => { if (MP.roomSeed == null) MP.roomSeed = seed; });
+    s.on('seed', (seed) => { MP.roomSeed = seed; reconcileSeed(); });   // the room's seed is whatever the server holds
     s.on('pjoin', (p) => { addGhost(p); sendFaceTo(p.id); setHud(); game.ui && game.ui.toast && game.ui.toast(p.name + ' הצטרף/ה'); });
     s.on('pleave', (id) => { const g = MP.ghosts.get(id); if (g) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); } if (window.__skin) window.__skin.release(id); if (window.__face) window.__face.drop(id); setHud(); });
     // v3.3: every player's chosen look
@@ -128,6 +128,18 @@
     const liveGhosts = () => [...MP.ghosts.values()].map((g) => g.e).filter((e) => e.y > -500 && !e.dead && isFinite(e.x) && e.world === game.world);
 
     // ---------- world seed shared per room ----------
+    // If my world was already running when I learned the room's seed (slow connection, or two people opening a new world at the same
+    // moment), the two of us are in different worlds. The server's seed wins: rebuild mine from it.
+    function reconcileSeed() {
+      const w = game.world;
+      if (!w || MP.roomSeed == null || w.seed === MP.roomSeed || MP.switching || !MP.connected) return;
+      if (game.state !== 'playing' && game.state !== 'paused') return;
+      MP.switching = true;
+      try { game.ui.toast('עובר לעולם של החדר…', 3); } catch (e) {}
+      let r; try { r = game.startWorld(Object.assign({}, game.meta), {}, true); } catch (e) { MP.switching = false; return; }
+      Promise.resolve(r).then(() => { MP.switching = false; }, () => { MP.switching = false; });
+    }
+    setInterval(reconcileSeed, 1500);
     const origStart = Game.prototype.startWorld;
     Game.prototype.startWorld = function (meta, mods, isNew) {
       if (MP.connected && MP.roomSeed != null && meta.seed !== MP.roomSeed) {
