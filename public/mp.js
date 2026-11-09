@@ -41,7 +41,7 @@
       const want = roomFor(mode);
       if (want === curRoom || game.world) return;   // switch only from the menu, before a world is open
       curRoom = want;
-      for (const [id, g] of [...MP.ghosts]) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); if (window.__skin) window.__skin.release(id); }
+      for (const [id, g] of [...MP.ghosts]) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); if (window.__skin) window.__skin.release(id); if (window.__face) window.__face.drop(id); }
       MP.roomSeed = null; MP.pending.length = 0; MP.home = null; MP.paints = {}; MP.paintsDirty = true; MP.lastEnv = null; MP.envApplied = false;
       if (MP.sleepers) MP.sleepers.clear();
       MP.isHost = false; MP.hostId = null;
@@ -54,9 +54,9 @@
       MP.roomSeed = d.seed; MP.pending.push(...d.edits);
       // after a reconnect: forget players who left meanwhile, and refresh the looks of those still here
       const here = new Set(d.players.map((p) => p.id));
-      for (const [id, g] of [...MP.ghosts]) if (!here.has(id)) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); if (window.__skin) window.__skin.release(id); }
+      for (const [id, g] of [...MP.ghosts]) if (!here.has(id)) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); if (window.__skin) window.__skin.release(id); if (window.__face) window.__face.drop(id); }
       for (const p of d.players) { const g = MP.ghosts.get(p.id); if (g) { g.team = teamOf(p.skin); if (window.__skin) try { window.__skin.apply(g.e, p.skin, p.id); } catch (e) {} } }
-      for (const p of d.players) addGhost(p);
+      for (const p of d.players) { addGhost(p); sendFaceTo(p.id); }
       for (const k in d.chests || {}) applyChest(+k, d.chests[k]);
       if (d.env) { MP.lastEnv = d.env; MP.envApplied = false; }
       MP.home = d.home || null; MP.paints = d.paints || {}; MP.paintsDirty = true;
@@ -65,11 +65,19 @@
     });
     s.on('host', (d) => { if (d.env) MP.lastEnv = d.env; setHost(d.id); setHud(); });
     s.on('seed', (seed) => { if (MP.roomSeed == null) MP.roomSeed = seed; });
-    s.on('pjoin', (p) => { addGhost(p); setHud(); game.ui && game.ui.toast && game.ui.toast(p.name + ' הצטרף/ה'); });
-    s.on('pleave', (id) => { const g = MP.ghosts.get(id); if (g) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); } if (window.__skin) window.__skin.release(id); setHud(); });
+    s.on('pjoin', (p) => { addGhost(p); sendFaceTo(p.id); setHud(); game.ui && game.ui.toast && game.ui.toast(p.name + ' הצטרף/ה'); });
+    s.on('pleave', (id) => { const g = MP.ghosts.get(id); if (g) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); } if (window.__skin) window.__skin.release(id); if (window.__face) window.__face.drop(id); setHud(); });
     // v3.3: every player's chosen look
     s.on('skin', (d) => { const g = d && MP.ghosts.get(d.id); if (!g) return; g.team = teamOf(d.skin); if (window.__skin) try { window.__skin.apply(g.e, d.skin, d.id); } catch (e) {} });
     MP.sendSkin = () => { if (MP.connected) s.emit('skin', skinOut()); };
+    // v3.7: a face from a photo goes player to player (the server only passes it on, and keeps nothing)
+    const faceOut = () => (window.__face && window.__face.local()) || null;
+    function sendFaceTo(id) { const u = faceOut(); if (u) relay(id, { t: 'face', url: u, rd: window.__face.localRd(), st: window.__face.localSt() }); }
+    MP.sendFace = () => { const u = faceOut(); for (const id of MP.ghosts.keys()) relay(id, { t: 'face', url: u, rd: u ? window.__face.localRd() : undefined, st: u ? window.__face.localSt() : undefined }); };
+    s.on('relay', (m) => {
+      if (!m || m.t !== 'face' || !window.__face || typeof m.from !== 'string') return;
+      if (m.url && window.__face.ok(m.url)) window.__face.set(m.from, m.url, m.rd, m.st); else window.__face.drop(m.from);
+    });
     s.on('state', (d) => { const g = MP.ghosts.get(d.id); if (g) Object.assign(g.t, d); });
     s.on('edits', (arr) => { for (const e of arr) MP.pending.push(e); });
     s.on('chest', (d) => applyChest(d.k, d.arr));
@@ -101,10 +109,10 @@
       if (MP.ghosts.has(p.id)) return;
       const e = Object.create(Player.prototype);
       const id = p.id;
-      Object.assign(e, { game, world: game.world, _ghost: id, kind: 'mob', type: 'mp', x: isFinite(p.x) ? p.x : 0, y: isFinite(p.y) ? p.y : -999, z: isFinite(p.z) ? p.z : 0, yaw: p.yaw || 0, pitch: p.pitch || 0,
+      Object.assign(e, { game, world: game.world, _ghost: id, faceKey: id, kind: 'mob', type: 'mp', x: isFinite(p.x) ? p.x : 0, y: isFinite(p.y) ? p.y : -999, z: isFinite(p.z) ? p.z : 0, yaw: p.yaw || 0, pitch: p.pitch || 0,
         vx: 0, vy: 0, vz: 0, hw: 0.3, h: 1.8, eye: 1.62, bobPhase: 0, bobAmount: 0, swingTime: 0, swingDur: 0.28, swingKind: 'hit', sneaking: false, eatT: 0, bowCharge: 0,
         riding: null, effects: {}, hurtTime: 0, invuln: 0, dead: false, health: 20, maxHealth: 20, onGround: true, inWater: false, headInWater: false, air: 10, food: 20, spawn: { x: 0, y: 80, z: 0 },
-        inventory: { armor: [null, null, null, null, null], held: null, slots: [], add(iid, n, dur) { relay(id, { t: 'give', id: iid, n, dur }); return 0; }, consumeHeld() {}, wearHeld() {}, count() { return 0; }, has() { return false; }, on() {} } });
+        inventory: { armor: [null, null, null, null, null], held: null, slots: [], add(iid, n, dur, range, src) { relay(id, { t: 'give', id: iid, n, dur, ex: src && (src.ench || src.rep) ? C.stackToArr(src) : undefined }); return 0; }, consumeHeld() {}, wearHeld() {}, count() { return 0; }, has() { return false; }, on() {} } });
       const mate = () => { const g = MP.ghosts.get(id); return !!(MP.team && g && g.team === MP.team); };
       e.hurt = function (amt, sx, sz, src, cause) { if (this.dead || amt <= 0 || this.invuln > 0 || mate()) return; this.invuln = 0.5; this.hurtTime = 0.3; relay(id, { t: 'hurt', amt, sx, sz, cause: cause || null }); };
       e.damage = function (amt, sx, sz, knock) { if (this.dead || this.invuln > 0) return false; if (mate()) { try { game.ui.toast('זה חבר בקבוצה שלך', 1.2); } catch (er) {} return false; } this.invuln = 0.45; this.hurtTime = 0.3; relay(id, { t: 'hurt', amt, sx, sz, cause: 'player', knock }); return true; };
@@ -149,6 +157,12 @@
     for (const m of ['fluidTick', 'randomTick']) {
       const f = World.prototype[m];
       World.prototype[m] = function () { if (!hostSim()) return; return f.apply(this, arguments); };
+    }
+    // v3.5: redstone machines run only on the host (their block changes reach everyone)
+    if (C.Redstone) {
+      C.Redstone.prototype.canSim = function () { return hostSim(); };
+      // hoppers and dispensers change containers on the host: send them on (one a tick, so the server isn't flooded)
+      C.Redstone.prototype.contChanged = function (k) { if (online() && MP.isHost && this.w === game.world) (MP.contDirty || (MP.contDirty = new Set())).add(k); };
     }
     const origSpawn = Spawner.prototype.update;
     Spawner.prototype.update = function (dt) {
@@ -195,16 +209,16 @@
       return origAdd.call(this, e);
     };
     const origItem = Game.prototype.spawnItem;
-    Game.prototype.spawnItem = function (x, y, z, id, n, pop, dur) {
-      if (hostSim()) return origItem.call(this, x, y, z, id, n, pop, dur);
-      relay('host', { t: 'item', x, y, z, id, n, dur, pop: !!pop });
-      return new ItemEntity(this, x, y, z, makeStack(id, n, dur));   // detached dummy
+    Game.prototype.spawnItem = function (x, y, z, id, n, pop, dur, src) {
+      if (hostSim()) return origItem.call(this, x, y, z, id, n, pop, dur, src);
+      relay('host', { t: 'item', x, y, z, id, n, dur, pop: !!pop, ex: src && (src.ench || src.rep) ? C.stackToArr(src) : undefined });
+      return new ItemEntity(this, x, y, z, makeStack(id, n, dur, src));   // detached dummy
     };
     const origDrop = Game.prototype.dropStack;
     Game.prototype.dropStack = function (stack) {
       if (hostSim() || !stack || !this.player) return origDrop.call(this, stack);
       const p = this.player, d = p.lookDir();
-      relay('host', { t: 'item', x: p.x + d[0] * 0.4, y: p.eyeY - 0.3, z: p.z + d[2] * 0.4, id: stack.id, n: stack.n, dur: stack.dur, vx: d[0] * 4.5, vy: d[1] * 4.5 + 2, vz: d[2] * 4.5, pd: 1.6 });
+      relay('host', { t: 'item', x: p.x + d[0] * 0.4, y: p.eyeY - 0.3, z: p.z + d[2] * 0.4, id: stack.id, n: stack.n, dur: stack.dur, ex: stack.ench || stack.rep ? C.stackToArr(stack) : undefined, vx: d[0] * 4.5, vy: d[1] * 4.5 + 2, vz: d[2] * 4.5, pd: 1.6 });
     };
     // PvP: other players can be targeted and hit like mobs
     const origTarget = Player.prototype.updateTarget;
@@ -219,10 +233,17 @@
       const g = game;
       if (!g.world || !g.player) return;
       if (m.t === 'hurt') { const p = g.player; if (p.dead) return; p.hurt(m.amt, m.sx, m.sz, null, m.cause === 'player' ? undefined : (m.cause || undefined)); if (m.knock) { const dx = p.x - m.sx, dz = p.z - m.sz, d = Math.hypot(dx, dz) || 1; p.vx += dx / d * 4 * m.knock; p.vz += dz / d * 4 * m.knock; p.vy = Math.max(p.vy, 4); } }
-      else if (m.t === 'give') { const left = g.player.inventory.add(m.id, m.n, m.dur == null ? undefined : m.dur); if (left < m.n) { g.audio.pickup(); g.ui.notePickup(m.id, m.n - left); } if (left > 0) g.spawnItem(g.player.x, g.player.y + 0.5, g.player.z, m.id, left, true, m.dur == null ? undefined : m.dur); }
+      else if (m.t === 'give') { const ex = Array.isArray(m.ex) && C.ITEMS[m.ex[0]] ? C.arrToStack(m.ex) : undefined, left = g.player.inventory.add(m.id, m.n, m.dur == null ? undefined : m.dur, undefined, ex); if (left < m.n) { g.audio.pickup(); g.ui.notePickup(m.id, m.n - left); } if (left > 0) g.spawnItem(g.player.x, g.player.y + 0.5, g.player.z, m.id, left, true, m.dur == null ? undefined : m.dur, ex); }
+      else if (m.t === 'cartData') { const e = MP.proxies.get(m.nid); if (e) { if (m.variant && !e.items) e.variant = m.variant; applyCartArr(e, m.items, true); } }
       if (!MP.isHost) return;
-      if (m.t === 'item') {
-        const e = origItem.call(g, m.x, m.y, m.z, m.id, m.n, m.pop, m.dur == null ? undefined : m.dur);
+      if (m.t === 'cartGet') {
+        const e = g.entities.find((x) => x._nid === m.nid);
+        if (e && e.items) relay(m.from, { t: 'cartData', nid: m.nid, variant: e.variant, items: serArr(e.items) });
+      } else if (m.t === 'cartSet') {
+        const e = g.entities.find((x) => x._nid === m.nid);
+        if (e && e.items && Array.isArray(m.items)) applyCartArr(e, m.items, false);
+      } else if (m.t === 'item') {
+        const e = origItem.call(g, m.x, m.y, m.z, m.id, m.n, m.pop, m.dur == null ? undefined : m.dur, Array.isArray(m.ex) && C.ITEMS[m.ex[0]] ? C.arrToStack(m.ex) : undefined);
         if (m.vx !== undefined) { e.vx = m.vx; e.vy = m.vy; e.vz = m.vz; } if (m.pd) e.pickupDelay = m.pd;
       } else if (m.t === 'spawn') {
         const K = C[m.cls]; if (!K) return;
@@ -254,7 +275,7 @@
         if (e.kind === 'item') r.push(e.stack.id, e.stack.n, e.stack.dur === undefined ? -1 : e.stack.dur);
         else { const ci = ciOf(e); if (ci) r.push(ci); }
         list.push(r);
-        if (full) { const o = {}; if (e.offers) o.offers = JSON.parse(JSON.stringify(e.offers)); if (e.colorIdx !== undefined) o.colorIdx = e.colorIdx; for (const k in e) { const v = e[k]; if (!SKIP.has(k) && (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string')) o[k] = v; } props[e._nid] = o; }
+        if (full) { const o = {}; if (e.items) o.cartItems = serArr(e.items); if (e.offers) o.offers = JSON.parse(JSON.stringify(e.offers)); if (e.colorIdx !== undefined) o.colorIdx = e.colorIdx; for (const k in e) { const v = e[k]; if (!SKIP.has(k) && (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string')) o[k] = v; } props[e._nid] = o; }
         if (list.length >= 250) break;
       }
       const rb = {}; for (const e of g.entities) if (e._nid && e.rider) rb[e._nid] = e.rider === g.player ? s.id : e.rider._ghost;
@@ -300,7 +321,12 @@
         e.tx = x; e.ty = y; e.tz = z; e.tyaw = yaw;
         if (e.kind === 'mob') { e.health = hp; if (dead && !e.dead) { e.dead = true; e.deathTime = 0; } if (hurt && !(e.hurtTime > 0)) e.hurtTime = 0.25; }
         else if (e.stack) { e.stack.id = r[9]; e.stack.n = r[10]; }
-        if (d.p && d.p[nid]) { const keepRider = e.rider; Object.assign(e, d.p[nid], { kind: e.kind }); e.rider = keepRider; if (game.ui && game.ui.tradeWith === e) try { game.ui.renderTrade(); } catch (er) {} }
+        if (d.p && d.p[nid]) { const keepRider = e.rider; const pc = d.p[nid].cartItems; Object.assign(e, d.p[nid], { kind: e.kind }); delete e.cartItems; e.rider = keepRider;
+          if (e.type === 'cart') {   // carts with a chest / hopper: keep the contents in step (not while I am editing it)
+            const want = e.variant === 'chest' ? 27 : e.variant === 'hopper' ? 5 : 0;
+            if (!want) e.items = null; else if (!e.items || e.items.length !== want) e.items = new Array(want).fill(null);
+            if (pc && e.items && !(game.ui && game.ui.chest && game.ui.chest.cart === e) && Date.now() - (e._ciSent || 0) > 2500) applyCartArr(e, pc, true);
+          } if (game.ui && game.ui.tradeWith === e) try { game.ui.renderTrade(); } catch (er) {} }
         // riders (snapshot says who sits on it)
         const rb = d.rb && d.rb[nid];
         if (rb) { if (rb === s.id) e.rider = game.player; else { const gh = MP.ghosts.get(rb); e.rider = gh ? gh.e : { _ghost: rb }; if (game.player.riding === e) game.player.dismount(); } }
@@ -319,12 +345,12 @@
     }
 
     // ---------- chests ----------
-    const serArr = (arr) => arr.map((st) => (st ? [st.id, st.n, st.dur === undefined ? -1 : st.dur] : null));
+    const serArr = (arr) => arr.map((st) => (st ? C.stackToArr(st) : null));   // (keeps enchantments)
     function applyChest(k, data) {
       const w = game.world; if (!data) return;
       if (!w) { (MP.chestQ = MP.chestQ || {})[k] = data; return; }
-      let arr = w.containers.get(k); if (!arr) { arr = new Array(27).fill(null); w.containers.set(k, arr); }
-      for (let i = 0; i < 27; i++) { const v = data[i]; arr[i] = v ? makeStack(v[0], v[1], v[2] >= 0 ? v[2] : undefined) : null; }
+      let arr = w.containers.get(k); if (!arr) { arr = new Array(data.length === 5 || data.length === 9 ? data.length : 27).fill(null); w.containers.set(k, arr); }
+      for (let i = 0; i < arr.length; i++) { const v = data[i]; arr[i] = Array.isArray(v) && C.ITEMS[v[0]] ? C.arrToStack(v) : null; }
       MP.chestLast[k] = JSON.stringify(serArr(arr));
       const ch = game.ui && game.ui.chest; if (ch && packPos(ch.x, ch.y, ch.z) === k && ch.arr === arr) { try { game.ui.renderInventory(); } catch (e) {} }
     }
@@ -341,9 +367,28 @@
       return r;
     };
     s.on('chestData', (d) => { if (d.arr) applyChest(d.k, d.arr); else { const ch = game.ui.chest; if (ch && packPos(ch.x, ch.y, ch.z) === d.k) s.emit('chestSet', { k: d.k, arr: serArr(ch.arr) }); } });
+    // chest / hopper carts: the host owns the contents, anyone can open the cart
+    function applyCartArr(e, data, remote) {
+      if (!e.items || !Array.isArray(data) || data.length !== e.items.length) return;
+      for (let i = 0; i < e.items.length; i++) { const v = data[i]; e.items[i] = Array.isArray(v) && C.ITEMS[v[0]] ? C.arrToStack(v) : null; }
+      e._ciLast = JSON.stringify(serArr(e.items));
+      const ch = game.ui && game.ui.chest; if (ch && ch.cart === e) { try { game.ui.renderInventory(); } catch (er) {} }
+    }
+    const origOpenCart = UI.prototype.openCartChest;
+    UI.prototype.openCartChest = function (cart) {
+      const r = origOpenCart.call(this, cart);
+      if (cart._remote && !hostSim() && online() && cart._nid) { cart._ciLast = JSON.stringify(serArr(cart.items)); relay('host', { t: 'cartGet', nid: cart._nid }); }
+      return r;
+    };
+    function checkCart(cart) {
+      if (!cart || !cart._remote || !cart._nid || hostSim() || !cart.items || !online()) return;
+      const j = JSON.stringify(serArr(cart.items));
+      if (cart._ciLast !== j) { cart._ciLast = j; cart._ciSent = Date.now(); relay('host', { t: 'cartSet', nid: cart._nid, items: serArr(cart.items) }); }
+    }
+    let openCart = null;
     let openCh = null;
     function checkChest(ch) {
-      if (!ch || !online()) return; const k = packPos(ch.x, ch.y, ch.z), j = JSON.stringify(serArr(ch.arr));
+      if (!ch || ch.cart || !online()) return; const k = packPos(ch.x, ch.y, ch.z), j = JSON.stringify(serArr(ch.arr));
       if (MP.chestLast[k] !== j) { MP.chestLast[k] = j; s.emit('chestSet', { k, arr: serArr(ch.arr) }); }
     }
 
@@ -355,6 +400,12 @@
       if (MP.out.length) { s.emit('edits', MP.out.splice(0, 3000)); }
       if (MP.isHost) sendSnap();
       const ch = game.ui && game.ui.chest; if (openCh && openCh !== ch) checkChest(openCh); openCh = ch || null; checkChest(ch);
+      { const oc = ch && ch.cart ? ch.cart : null; if (openCart && openCart !== oc) checkCart(openCart); openCart = oc; checkCart(oc); }
+      if (MP.contDirty && MP.contDirty.size && game.world) {
+        const k = MP.contDirty.values().next().value; MP.contDirty.delete(k);
+        const arr = game.world.containers.get(k);
+        if (arr) { const j = JSON.stringify(serArr(arr)); if (MP.chestLast[k] !== j) { MP.chestLast[k] = j; s.emit('chestSet', { k, arr: serArr(arr) }); } }
+      }
     }, 90);
     setInterval(() => { if (MP.connected && MP.isHost && game.world && game.state !== 'loading') s.emit('env', envNow()); }, 1000);
 
