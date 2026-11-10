@@ -30,27 +30,54 @@
     const labels = document.createElement('div'); labels.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9998'; document.body.appendChild(labels);
     // v3.4: אבונדאלהקהקה (creative) worlds live in a room of their own, next to the survival one
     let curRoom = room;
-    const roomFor = (mode) => (mode === 'creative' ? room.slice(0, 28) + '~cr' : room);
-    const roomLabel = () => (curRoom === room ? room : room + ' ✨');
+    let friendRoom = null;   // set by the "play with friends" menu: a 5-digit code that replaces the URL room until the player goes back to a normal game
+    const roomFor = (mode) => { const b = friendRoom || room; return mode === 'creative' ? b.slice(0, 28) + '~cr' : b; };
+    const roomLabel = () => (friendRoom ? friendRoom + (curRoom !== friendRoom ? ' ✨' : '') : (curRoom === room ? room : room + ' ✨'));
     const setHud = () => { hud.textContent = MP.connected ? `Online · room "${roomLabel()}" · ${MP.ghosts.size + 1} players${MP.isHost ? ' · host' : ''}` : 'Offline (single-player)'; };
     setHud();
 
     // ---------- connection ----------
     s.on('connect', () => { MP.connected = true; s.emit('join', { room: curRoom, name, skin: skinOut() }); setHud(); });
-    window.__mpRoomMode = (mode) => {
-      const want = roomFor(mode);
-      if (want === curRoom || game.world) return;   // switch only from the menu, before a world is open
+    function switchRoom(want) {
+      if (want === curRoom) return;
+      MP.lastSwitch = Date.now();
       curRoom = want;
       for (const [id, g] of [...MP.ghosts]) { g.label.remove(); if (g.bub) g.bub.remove(); MP.ghosts.delete(id); if (window.__skin) window.__skin.release(id); if (window.__face) window.__face.drop(id); }
-      MP.roomSeed = null; MP.pending.length = 0; MP.home = null; MP.paints = {}; MP.paintsDirty = true; MP.lastEnv = null; MP.envApplied = false;
+      MP.roomSeed = null; MP.pending.length = 0; MP.out.length = 0; MP.home = null; MP.paints = {}; MP.paintsDirty = true; MP.lastEnv = null; MP.envApplied = false;
       if (MP.sleepers) MP.sleepers.clear();
       MP.isHost = false; MP.hostId = null;
       if (MP.connected) { s.emit('leave'); s.emit('join', { room: curRoom, name, skin: skinOut() }); }
       setHud();
+    }
+    window.__mpRoomMode = (mode) => {
+      if (game.world) return;   // switch only from the menu, before a world is open
+      switchRoom(roomFor(mode));
+    };
+    // "play with friends": enter the room named by a code and report what is in it ({seed, n} = the world's seed if one exists, players already there)
+    window.__mpFriends = {
+      code: () => friendRoom,
+      leave: () => { friendRoom = null; },
+      join: (code, mode) => new Promise((resolve) => {
+        if (game.world) return resolve(null);
+        friendRoom = String(code).replace(/[^\w]/g, '').slice(0, 28);
+        const want = roomFor(mode === 'creative' ? 'creative' : 'survival');
+        let done = false;
+        const fin = (v) => { if (done) return; done = true; if (MP.onJoined === onJ) MP.onJoined = null; clearTimeout(tm); resolve(v); };
+        const onJ = (d) => { if (curRoom === want) fin({ seed: d.seed, n: (d.players || []).length }); };
+        const tm = setTimeout(() => fin(null), 9000);
+        MP.onJoined = onJ;
+        // the server allows only 3 'leave' per second: space room switches out
+        setTimeout(() => {
+          if (done) return;
+          if (curRoom === want) { if (MP.connected) { MP.lastSwitch = Date.now(); s.emit('leave'); s.emit('join', { room: curRoom, name, skin: skinOut() }); } }
+          else switchRoom(want);
+        }, Math.max(0, 450 - (Date.now() - (MP.lastSwitch || 0))));
+      }),
     };
     s.on('disconnect', () => { MP.connected = false; becomeHost(false, true); setHud(); });
     s.on('full', () => { hud.textContent = 'Room full (max 10) – single-player'; s.disconnect(); });
     s.on('joined', (d) => {
+      if (MP.onJoined) { try { MP.onJoined(d); } catch (e) {} }   // (first, so the menu's "join by code" never depends on the rest of this handler)
       MP.roomSeed = d.seed; MP.pending.push(...d.edits);
       // after a reconnect: forget players who left meanwhile, and refresh the looks of those still here
       const here = new Set(d.players.map((p) => p.id));
@@ -134,7 +161,7 @@
       const w = game.world;
       if (!w || MP.roomSeed == null || w.seed === MP.roomSeed || MP.switching || !MP.connected) return;
       if (game.state !== 'playing' && game.state !== 'paused') return;
-      MP.switching = true;
+      MP.switching = true; MP.out.length = 0;
       try { game.ui.toast('עובר לעולם של החדר…', 3); } catch (e) {}
       let r; try { r = game.startWorld(Object.assign({}, game.meta), {}, true); } catch (e) { MP.switching = false; return; }
       Promise.resolve(r).then(() => { MP.switching = false; }, () => { MP.switching = false; });
@@ -409,7 +436,12 @@
       const p = game.player; if (!MP.connected || !p || !game.world || game.state === 'loading' || !isFinite(p.x)) return;
       s.emit('state', { x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), yaw: +p.yaw.toFixed(3), pitch: +p.pitch.toFixed(3), sn: !!p.sneaking, sw: p.swingTime > 0, hp: Math.max(0, Math.ceil(p.health)), dead: !!p.dead, rd: !!p.riding, hl: C.heldLightOf ? C.heldLightOf(p) : 0, hi: p.inventory && p.inventory.held ? p.inventory.held.id : -1, oi: p.inventory && p.inventory.armor && p.inventory.armor[4] ? p.inventory.armor[4].id : -1,
         ride: (p.riding && p.riding._remote && p.riding._nid) ? { nid: p.riding._nid, x: +p.riding.x.toFixed(2), y: +p.riding.y.toFixed(2), z: +p.riding.z.toFixed(2), yaw: +(p.riding.yaw || 0).toFixed(3) } : null });
-      if (MP.out.length) { s.emit('edits', MP.out.splice(0, 3000)); }
+      if (MP.out.length) {
+        // edits are only valid for the room's world: hold them until the seed is known, drop them if my world is a different one
+        if (MP.roomSeed == null) { if (MP.out.length > 20000) MP.out.splice(0, MP.out.length - 20000); }
+        else if (game.world.seed !== MP.roomSeed) MP.out.length = 0;
+        else s.emit('edits', MP.out.splice(0, 3000));
+      }
       if (MP.isHost) sendSnap();
       const ch = game.ui && game.ui.chest; if (openCh && openCh !== ch) checkChest(openCh); openCh = ch || null; checkChest(ch);
       { const oc = ch && ch.cart ? ch.cart : null; if (openCart && openCart !== oc) checkCart(openCart); openCart = oc; checkCart(oc); }
