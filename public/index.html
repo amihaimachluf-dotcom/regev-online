@@ -614,6 +614,7 @@ html.pad #clickPlay { display: none !important; }
       <p class="tagline">עולם שלם של קוביות — לחצוב, לבנות ולשרוד את הלילה</p>
       <button class="btn primary" id="bPlay">שחק — הישרדות</button>
       <button class="btn crea-btn" id="bPlayCreative">✨ אבונדאלהקהקה</button>
+      <button class="btn" id="bFriends">👥 משחק עם חברים</button>
       <button class="btn" id="bSettings">הגדרות</button>
       <button class="btn" id="bHelp">איך משחקים</button>
     </div>
@@ -645,6 +646,35 @@ html.pad #clickPlay { display: none !important; }
       <div class="dialog-foot">
         <button class="btn primary" id="bCreate">צור עולם</button>
         <button class="btn" id="bNewBack">ביטול</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="friends" class="screen">
+    <div class="dim"></div>
+    <div class="dialog panel">
+      <div class="dialog-head"><h2 id="frTitle">👥 משחק עם חברים</h2></div>
+      <div class="dialog-body">
+        <div id="frChoose">
+          <button class="btn primary" id="bFrNew" style="width:100%;margin-bottom:10px">פתיחת עולם חדש</button>
+          <button class="btn" id="bFrJoin" style="width:100%">הצטרפות עם קוד</button>
+        </div>
+        <div id="frNew" style="display:none">
+          <div class="field"><label>קוד העולם — שלחו אותו לחברים</label>
+            <div id="frCode" style="font:700 44px var(--font);letter-spacing:10px;text-align:center;direction:ltr;padding:8px 0;user-select:all"></div></div>
+          <div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn small primary" id="bFrSurv" style="flex:1">הישרדות</button><button class="btn small" id="bFrCrea" style="flex:1">✨ אבונדאלהקהקה</button></div>
+          <div class="field"><label for="frNameNew">שם העולם</label><input type="text" id="frNameNew" maxlength="32" autocomplete="off"></div>
+          <div style="display:flex;gap:8px"><button class="btn small" id="bFrShare">שתף קוד</button><button class="btn small" id="bFrReroll">קוד אחר</button></div>
+        </div>
+        <div id="frJoin" style="display:none">
+          <div class="field"><label for="frCodeIn">קוד העולם של החבר</label><input type="text" id="frCodeIn" maxlength="5" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="12345" style="direction:ltr;text-align:center;font-size:28px;letter-spacing:8px"></div>
+          <div class="field"><label for="frNameJoin">שם העולם אצלך</label><input type="text" id="frNameJoin" maxlength="32" autocomplete="off"></div>
+        </div>
+        <p class="hint" id="frMsg" style="margin-top:8px"></p>
+      </div>
+      <div class="dialog-foot">
+        <button class="btn primary" id="bFrGo" style="display:none">התחל</button>
+        <button class="btn" id="bFrBack">חזרה</button>
       </div>
     </div>
   </div>
@@ -17328,6 +17358,16 @@ class UI {
     const g = this.game, click = (id, fn) => $(id).addEventListener('click', (e) => { g.audio.init(); g.audio.click(); fn(e); });
     click('bPlay', () => this.showWorlds('survival'));
     click('bPlayCreative', () => this.showWorlds('creative'));
+    click('bFriends', () => this.showFriends());
+    click('bFrNew', () => this.friendsView('new'));
+    click('bFrJoin', () => this.friendsView('join'));
+    click('bFrSurv', () => this.friendsMode('survival'));
+    click('bFrCrea', () => this.friendsMode('creative'));
+    click('bFrReroll', () => this.friendsCodeRoll());
+    click('bFrShare', () => this.friendsShare());
+    click('bFrGo', () => this.friendsGo());
+    click('bFrBack', () => { if (this.frView && this.frView !== 'choose') this.friendsView('choose'); else this.setScreens(['menu']); });
+    $('frCodeIn').addEventListener('input', (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 5); });
     click('bSettings', () => this.showSettings('menu'));
     click('bHelp', () => this.showHelp('menu'));
     click('bWorldsBack', () => this.setScreens(['menu']));
@@ -17475,6 +17515,7 @@ class UI {
     $('worldsTitle').textContent = cr ? 'עולמות אבונדאלהקהקה' : 'עולמות הישרדות';
     $('worlds').classList.toggle('crea', cr);
     this.setScreens(['menu', 'worlds']);
+    if (window.__mpFriends) try { window.__mpFriends.leave(); } catch (e) {}
     if (window.__mpRoomMode) try { window.__mpRoomMode(this.worldMode || 'survival'); } catch (e) {}
     const list = $('worldList');
     list.innerHTML = '<div class="empty">טוען עולמות…</div>';
@@ -17510,6 +17551,66 @@ class UI {
       row.append(th, meta, play, del);
       list.append(row);
     }
+  }
+  // ---------------- play with friends (a 5-digit code = one shared world) ----------------
+  showFriends() {
+    if (!window.__mpFriends) { this.toast('משחק עם חברים לא זמין כרגע', 2.5); return; }
+    this.worldMode = 'survival';
+    this.friendsView('choose');
+    this.setScreens(['menu', 'friends']);
+  }
+  friendsView(v) {
+    this.frView = v;
+    $('frChoose').style.display = v === 'choose' ? '' : 'none';
+    $('frNew').style.display = v === 'new' ? '' : 'none';
+    $('frJoin').style.display = v === 'join' ? '' : 'none';
+    $('bFrGo').style.display = v === 'choose' ? 'none' : '';
+    $('bFrGo').textContent = v === 'new' ? 'פתח עולם' : 'הצטרף';
+    $('frTitle').textContent = v === 'new' ? '👥 פתיחת עולם חדש' : v === 'join' ? '👥 הצטרפות עם קוד' : '👥 משחק עם חברים';
+    $('frMsg').textContent = '';
+    const names = ['עמק החברים', 'ארץ הכלניות', 'גבעות הבזלת', 'מפרץ החול', 'יער האלונים', 'רכס הרוחות', 'נחל הזהב'];
+    if (v === 'new') { this.friendsMode(this.frMode || 'survival'); if (!$('frNameNew').value) $('frNameNew').value = names[Math.floor(Math.random() * names.length)]; this.friendsCodeRoll(); }
+    if (v === 'join') { if (!$('frNameJoin').value) $('frNameJoin').value = names[Math.floor(Math.random() * names.length)]; if (!this.game.input.touch) setTimeout(() => $('frCodeIn').focus(), 50); }
+  }
+  friendsMode(m) { this.frMode = m; $('bFrSurv').classList.toggle('primary', m === 'survival'); $('bFrCrea').classList.toggle('primary', m === 'creative'); }
+  friendsCodeRoll() { this.frCode = String(10000 + Math.floor(Math.random() * 90000)); $('frCode').textContent = this.frCode; }
+  async friendsShare() {
+    const text = 'בוא לשחק איתי ברגב! במשחק לחץ על "משחק עם חברים" ← "הצטרפות עם קוד" והכנס את הקוד: ' + this.frCode;
+    try { if (navigator.share) { await navigator.share({ title: 'רגב', text }); return; } } catch (e) { return; }
+    try { await navigator.clipboard.writeText(text); this.toast('ההודעה עם הקוד הועתקה', 2); } catch (e) { prompt('העתק:', text); }
+  }
+  async friendsGo() {
+    if (this.frBusy) return; this.frBusy = true;
+    const mp = window.__mpFriends, msg = (t) => { $('frMsg').textContent = t; };
+    const go = $('bFrGo'); go.disabled = true;
+    try {
+      if (this.frView === 'new') {
+        msg('מתחבר לשרת…');
+        const name = $('frNameNew').value.trim() || 'עולם חברים';
+        const mode = this.frMode || 'survival';
+        let r = null;
+        for (let i = 0; i < 6; i++) {
+          const o = await mp.join(this.frCode, mode === 'creative' ? 'survival' : 'creative');   // the code must be free in both kinds of world
+          if (!o) { msg('אין חיבור לשרת. בדוק אינטרנט ונסה שוב.'); return; }
+          r = await mp.join(this.frCode, mode);
+          if (!r) { msg('אין חיבור לשרת. בדוק אינטרנט ונסה שוב.'); return; }
+          if (r.seed == null && r.n === 0 && o.seed == null && o.n === 0) break;   // a free code
+          this.friendsCodeRoll(); r = null;               // somebody already uses it: pick another
+        }
+        if (!r) { msg('לא הצלחנו למצוא קוד פנוי, נסה שוב.'); return; }
+        this.worldMode = mode; this.game.audio.init(); this.game.newWorld(name, '', mode);
+      } else {
+        const code = $('frCodeIn').value.replace(/\D/g, '');
+        if (code.length !== 5) { msg('הקוד הוא 5 ספרות.'); return; }
+        msg('מתחבר…');
+        const name = $('frNameJoin').value.trim() || 'עולם חברים';
+        let mode = 'survival', r = await mp.join(code, 'survival');
+        if (r && r.seed == null) { mode = 'creative'; r = await mp.join(code, 'creative'); }   // the friend may have opened a creative world
+        if (!r) { msg('אין חיבור לשרת. בדוק אינטרנט ונסה שוב.'); return; }
+        if (r.seed == null) { msg('לא נמצא עולם עם הקוד הזה. בדוק את הקוד, או שהחבר עוד לא פתח את העולם.'); return; }
+        this.worldMode = mode; this.game.audio.init(); this.game.newWorld(name, '', mode);
+      }
+    } finally { this.frBusy = false; go.disabled = false; }
   }
   showNewWorld() {
     $('newWorldTitle').textContent = this.worldMode === 'creative' ? 'עולם אבונדאלהקהקה חדש' : 'עולם הישרדות חדש';
@@ -18445,6 +18546,7 @@ class UI {
     if (on('help')) return this.closeOverlay();
     if (on('achievements')) return this.showPause();
     if (st === 'paused') return g.resume();
+    if (on('friends')) return (this.frView && this.frView !== 'choose') ? this.friendsView('choose') : this.setScreens(['menu']);
     if (on('newworld')) return this.showWorlds();
     if (on('worlds')) return this.setScreens(['menu']);
   }
