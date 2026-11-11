@@ -298,6 +298,7 @@
       const n = e.constructor.name;
       if (n === 'Villager') return { village: e.village, idx: e.idx, prof: e.prof, female: !!e.female, person: e.person, seed: e.seed, home: e.home, plaza: e.plaza };
       if (n === 'Dragon') return { color: e.color, grow: e.grow, wild: !!e.wild };
+      if (n === 'Spider' && e.hall) return { hall: 1 };   // the spiders of the mountain temple hall: the flag must reach every client with the first snapshot (a new host counts them)
       return 0;
     };
     // ---------- host snapshots ----------
@@ -354,6 +355,7 @@
             if (cls === 'ItemEntity') e = new ItemEntity(g, x, y, z, makeStack(r[9], r[10], r[11] >= 0 ? r[11] : undefined));
             else { const K = C[cls] || (C.MOB_TYPES && Object.values(C.MOB_TYPES).find((k) => k.name === cls)); if (!K) continue; e = r[9] && typeof r[9] === 'object' ? new K(g, x, y, z, r[9]) : new K(g, x, y, z); }
           } catch (er) { continue; }
+          if (cls === 'Spider' && r[9] && r[9].hall) { e.hall = true; e.persist = true; }
           e._nid = nid; e._remote = true; e.yaw = yaw; e.update = proxyUpdate; if (e.kind === 'mob' || e.kind === 'boat') e.damage = proxyDamage;
           MP.proxies.set(nid, e); g.entities.push(e);
         }
