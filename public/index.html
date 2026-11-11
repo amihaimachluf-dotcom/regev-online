@@ -1532,14 +1532,23 @@ Tex.def('lamp', (p, r) => {
   p.set(5, 5, [255, 255, 255]); p.set(10, 10, [255, 255, 255]);
 });
 Tex.def('mattress_top', (p, r) => {
-  p.noise([232, 222, 200], 0.05, r);
-  for (let y = 0; y < 5; y++) for (let x = 1; x < 15; x++) p.set(x, y, sh([250, 246, 238], 0.97 + r() * 0.04));
-  for (let y = 7; y < 16; y += 4) for (let x = 2; x < 16; x += 4) p.set(x, y, [196, 182, 156]);
+  // a made bed seen from above: wooden frame round the edge, red blanket, white pillow at the head (top of the tile)
+  const red = [178, 48, 52], wood = [124, 88, 52], wood2 = [96, 66, 38];
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) p.set(x, y, sh(red, 0.94 + r() * 0.08));
+  for (let x = 0; x < 16; x++) { p.set(x, 0, sh(wood2, 0.96 + r() * 0.06)); p.set(x, 1, sh(wood, 0.96 + r() * 0.06)); p.set(x, 15, sh(wood, 0.96 + r() * 0.06)); }
+  for (let y = 0; y < 16; y++) { p.set(0, y, sh(wood, 0.96 + r() * 0.06)); p.set(15, y, sh(wood, 0.96 + r() * 0.06)); }
+  for (let y = 3; y < 7; y++) for (let x = 2; x < 14; x++) p.set(x, y, sh(y === 3 || y === 6 ? [236, 232, 224] : [250, 248, 242], 0.97 + r() * 0.04));   // pillow
+  for (let x = 1; x < 15; x++) { p.set(x, 8, sh([140, 34, 40], 1)); p.set(x, 9, sh([200, 64, 68], 1)); }                                                // folded edge of the blanket
+  for (let y = 11; y < 15; y += 3) for (let x = 3; x < 14; x += 4) p.set(x, y, [150, 40, 46]);
 });
 Tex.def('mattress_side', (p, r) => {
+  // bed seen from the side: blanket hanging over the frame, then the wooden frame with darker legs at both ends
   p.clear();
   for (let y = 7; y < 16; y++) for (let x = 0; x < 16; x++) {
-    const c = y === 7 ? [244, 238, 226] : (Math.floor((y - 8) / 2) % 2 === 0 ? [72, 112, 170] : [230, 220, 198]);
+    let c;
+    if (y === 7) c = [200, 64, 68];
+    else if (y <= 10) c = y === 10 ? [140, 34, 40] : [178, 48, 52];
+    else c = (x < 2 || x > 13) ? [86, 58, 32] : (y === 11 ? [96, 66, 38] : [124, 88, 52]);
     p.set(x, y, sh(c, 0.96 + r() * 0.06));
   }
 });
@@ -3853,7 +3862,7 @@ defBlock(33, 'torch', { name: 'לפיד', tex: { top: 'torch_top', bottom: 'torc
 defBlock(34, 'workbench', { name: 'שולחן עבודה', tex: { top: 'bench_top', bottom: 'planks', side: 'bench_side' }, hardness: 2.5, tool: 'axe', sound: 'wood', station: 'bench', use: 'craft' });
 defBlock(35, 'furnace', { name: 'כבשן', tex: { top: 'furnace_top', bottom: 'furnace_top', side: 'furnace_side' }, hardness: 3.5, tool: 'pickaxe', tier: 1, station: 'furnace', use: 'craft' });
 defBlock(36, 'lamp', { name: 'פנס גבישי', tex: 'lamp', hardness: 0.4, emit: 15, sound: 'glass' });
-defBlock(37, 'mattress', { name: 'מזרן', tex: { top: 'mattress_top', bottom: 'planks', side: 'mattress_side' }, model: MODEL.SLAB, pass: PASS.CUTOUT, opaque: false, absorb: 0, height: 9 / 16, hardness: 0.4, sound: 'wool', use: 'sleep' });
+defBlock(37, 'mattress', { name: 'מיטה', tex: { top: 'mattress_top', bottom: 'planks', side: 'mattress_side' }, model: MODEL.SLAB, pass: PASS.CUTOUT, opaque: false, absorb: 0, height: 9 / 16, hardness: 0.4, sound: 'wool', use: 'sleep' });
 // ---- v1.3 ----
 defBlock(38, 'diamond_ore', { name: 'עפרת יהלום', tex: 'diamond_ore', hardness: 3.5, tool: 'pickaxe', tier: 3, drop: 'diamond' });
 // chest meta: bits 0-1 facing (H4 index of the front), bits 2-4 unopened loot table
@@ -9251,7 +9260,7 @@ class Renderer {
     const warm = 1 - smoothstep(0.05, 0.35, e);
     const sunCol = [0.5 * sunAbove, (0.47 - 0.14 * warm) * sunAbove, (0.42 - 0.24 * warm) * sunAbove].map((v) => v * (1 - rain * 0.8));
     const moonPhase = (0.5 + ((game.day || 1) - 1) / 8) % 1, moonFull = 0.5 - 0.5 * Math.cos(moonPhase * Math.PI * 2);
-    const ambDay = [0.6, 0.63, 0.68], ambNight = [0.05, 0.062, 0.11].map((v) => v * (0.72 + 0.28 * moonFull));
+    const ambDay = [0.6, 0.63, 0.68], ambNight = [0.24, 0.28, 0.42].map((v) => v * (0.8 + 0.2 * moonFull));   // moonlit nights: you can see the shapes of the land
     const amb = [lerp(ambNight[0], ambDay[0], day), lerp(ambNight[1], ambDay[1], day), lerp(ambNight[2], ambDay[2], day)].map((v) => v * (1 - rain * 0.25));
     const dust = game.weather.dust || 0;
     if (dust > 0) {
@@ -11369,7 +11378,7 @@ class Spider extends Mob {
   onHurt() { this.angry = 20; }
   drops() { return [[I.string, Math.floor(Math.random() * 3)]]; }
   hostile() {
-    if (this.angry > 0 || this.game.daylight < 0.4) return true;
+    if (this.hall || this.angry > 0 || this.game.daylight < 0.4) return true;   // the spiders of the mountain temple hall are hostile day and night
     const l = this.world.lightAt(this.x, this.y + 0.5, this.z);
     return (l >> 4) < 8 && (l & 15) < 8;
   }
@@ -15266,7 +15275,12 @@ class Player {
       // hold the use button to draw, release to shoot; a tap (touch) fires a quick shot.
       // Doors, chests, benches and beds still work while holding a bow.
       const interact = !!(this.target && BLOCKS[this.target.block].use && !inp.sneak);
-      if (inp.tap) { inp.tap = false; if (this.targetEntity) this.attack(this.targetEntity); else if (interact) this.use(inp); else this.shootBow(0.8); }
+      if (inp.tap) {
+        inp.tap = false;
+        const te = this.targetEntity;
+        if (te && Math.hypot(te.x - this.x, te.z - this.z) < 3) this.attack(te);   // close enough to hit with the bow; further away the tap shoots
+        else if (interact) this.use(inp); else this.shootBow(0.8);
+      }
       if (inp.useTap) { inp.useTap = false; if (interact) this.use(inp); else this.shootBow(0.8); }
       if (inp.secondary) {
         if (inp.secondaryPressed && interact) { this.use(inp); this.bowBlocked = true; this.bowCharge = 0; }
@@ -15284,7 +15298,7 @@ class Player {
     if (inp.tap) {
       inp.tap = false;
       if (this.targetEntity) { if (!this.interactMob(this.targetEntity)) this.attack(this.targetEntity); }
-      else this.use(inp);
+      else this.tapUse(inp);
     }
     if (inp.useTap) { inp.useTap = false; this.use(inp); }
     // attack on press
@@ -15349,9 +15363,11 @@ class Player {
     if (BLOCKS[b].hardness >= 0.5) g.input.haptic(20);
   }
 
+  tapUse(inp) { this.use(inp); }
   use(inp) {
     const inv = this.inventory, off = inv.armor[4];
-    if (!off || off.id === I.shield || this.mainHandBusy(inp)) { this.useMain(inp); return; }
+    // a torch or lantern in the off-hand only gives light: it is never placed from there (place it from the main hand)
+    if (!off || off.id === I.shield || off.id === I.torch || off.id === I.lantern || this.mainHandBusy(inp)) { this.useMain(inp); return; }
     const sel = inv.selected, main = inv.slots[sel];
     inv.slots[sel] = off; inv.armor[4] = main;
     try { this.useMain(inp); } finally {
@@ -17009,6 +17025,7 @@ class Input {
         } else if (this.look && t.identifier === this.look.id) {
           const dt = performance.now() - this.look.t0;
           if (!this.look.mining && this.look.moved < 14 && dt < 300) this.tap = true;
+          if (this.look.drawing) this.secondary = false;
           this.look = null; this.primary = false;
         }
       }
@@ -17018,8 +17035,17 @@ class Input {
   }
   updateTouch() {
     if (!this.look) return;
-    if (!this.look.mining && this.look.moved < 14 && performance.now() - this.look.t0 > 300) { this.look.mining = true; }
-    if (this.look.mining) this.primary = true;
+    const L = this.look, el = performance.now() - L.t0, pl = this.game.player, hit = pl && pl.inventory.held ? ITEMS[pl.inventory.held.id] : null;
+    if (hit && hit.bow && !L.mining) {
+      // with a bow in hand, holding the screen draws it (keep the finger down and drag to aim, lift to shoot) instead of mining
+      if (!L.drawing && L.moved < 14 && el > 180) {
+        L.drawing = true;
+        if (!this.bowHinted) { this.bowHinted = true; try { this.game.ui.toast('מחזיקים את האצבע כדי למתוח, גוררים כדי לכוון, מרפים כדי לירות', 3.5); } catch (e) {} }
+      }
+      if (L.drawing) { this.secondary = true; return; }
+    }
+    if (!L.mining && L.moved < 14 && el > 300) { L.mining = true; }
+    if (L.mining) this.primary = true;
   }
   consumeLook() { const dx = this.lookDX, dy = this.lookDY; this.lookDX = 0; this.lookDY = 0; return [dx, dy]; }
   // ---------------- game controller (Xbox and other standard pads, on PC or phone) ----------------
@@ -17191,7 +17217,7 @@ const TIPS = [
   'מקש V מחליף למבט מגוף שלישי — ככה רואים את השריון עליכם.',
   'מכוש עץ חוצב אבן. כדי לחצוב ברזל וגבישים צריך מכוש אבן.',
   'בכבשן מתיכים ברזל, צולים בשר ומייצרים זכוכית.',
-  'נוצות של דוכיפת וקרשים יוצרים מזרן — שינה עליו מדלגת על הלילה.',
+  'נוצות של דוכיפת וקרשים יוצרים מיטה — שינה עליה מדלגת על הלילה.',
   'כשמתכופפים לא נופלים מקצוות. שימושי על גשרים ועל צוקים.',
   'הגבישים הזוהרים מסתתרים עמוק מתחת לאדמה, ליד שכבות הבזלת.',
   'כל עולם נשמר אוטומטית. אותו זרע תמיד יוצר את אותו עולם.',
@@ -17554,7 +17580,10 @@ class UI {
   }
   // ---------------- play with friends (a 5-digit code = one shared world) ----------------
   showFriends() {
-    if (!window.__mpFriends) { this.toast('משחק עם חברים לא זמין כרגע', 2.5); return; }
+    if (!window.__mpFriends) {
+      this.toast(typeof io === 'undefined' ? 'אין חיבור לשרת. פותחים את המשחק מהכתובת של השרת ולא מקובץ או מתצוגה מקדימה' : 'הקובץ mp.js ישן. מחליפים גם אותו ומרעננים את הדף', 5);
+      return;
+    }
     this.worldMode = 'survival';
     this.friendsView('choose');
     this.setScreens(['menu', 'friends']);
@@ -20233,6 +20262,40 @@ class Game {
     else this.travel(SKY_LAND.x + 1, SKY_LAND.y + 1, SKY_LAND.z + 3, 0, '…נפלתם מהשמיים');
   }
   // v2.6: sharks circle the sunken temple, spiders lurk in the forest temple, vipers nest in the salt fortress's yard
+  // the hall under the mountain temple (the one with the altar that says אמת) always holds 7 spiders:
+  // while someone is near, missing ones are brought back, one every few seconds (all 7 at once the first time)
+  // in a shared world the host looks after the hall for every player, so a guest alone at the temple finds the same 7 spiders
+  hallTick(p) {
+    if (this.peaceful) return;
+    const mp = window.__mp; if (mp && mp.connected && !mp.isHost) return;
+    const ps = [p];
+    if (mp && mp.ghosts) for (const g of mp.ghosts.values()) { const e = g.e; if (e && !e.dead && e.y > -500 && isFinite(e.x)) ps.push(e); }
+    const seen = new Set();
+    for (const q of ps) for (const st of this.world.gen.structs.around(q.x, q.z, 40)) {
+      if (st.type !== 'shrine' || seen.has(st.key)) continue;
+      seen.add(st.key); this.hallSpiders(st, ps);
+    }
+  }
+  hallSpiders(st, ps) {
+    const w = this.world, f = structTurn(w.gen, st), [dx, dz] = ROT(f, SHRINE_HALL.cx, SHRINE_HALL.cz), cx = st.x + dx, cz = st.z + dz, fy = st.y - SHRINE_DEPTH + 1;
+    if (!w.isLoaded(cx, cz) || !w.isLoaded(cx + 8, cz) || !w.isLoaded(cx - 8, cz) || !w.isLoaded(cx, cz + 8) || !w.isLoaded(cx, cz - 8)) return;
+    if (w.getBlock(cx, fy, cz) !== B.golem_altar && w.getBlock(cx, fy, cz) !== B.altar_cold) return;   // not this shrine's hall (or not built yet)
+    const mp = window.__mp; if (mp && mp.connected && !mp.isHost) return;                          // only the host of a shared world makes them
+    let n = 0;
+    for (const e of this.entities) if (e.hall && !e.dead && !e.remove && Math.abs(e.x - cx) < 14 && Math.abs(e.z - cz) < 14 && Math.abs(e.y - fy) < 14) n++;
+    if (n >= 7) return;
+    const key = st.key, now = performance.now();
+    if (!this.hallT) this.hallT = {};
+    const first = !this.hallT[key]; if (!first && now - this.hallT[key] < 4000) return;
+    this.hallT[key] = now;
+    let want = first ? 7 - n : 1, tries = 0;
+    while (want > 0 && tries++ < 60) {
+      const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 7, x = Math.floor(cx + Math.cos(a) * r), z = Math.floor(cz + Math.sin(a) * r);
+      if (!first && ps.some((p) => Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) < 6 && Math.abs(p.y - fy) < 6)) continue;   // never pop in next to the player
+      if (B_SOLID[w.getBlock(x, fy, z)] || B_FLUID[w.getBlock(x, fy, z)] || B_SOLID[w.getBlock(x, fy + 1, z)] || !B_SOLID[w.getBlock(x, fy - 1, z)]) continue;
+      const s = new Spider(this, x + 0.5, fy, z + 0.5); s.hall = true; s.persist = true; this.addEntity(s); want--;
+    }
+  }
   spawnGuards(st) {
     const w = this.world, f = structTurn(w.gen, st);
     const spot = (lx, lz, y0, y1, water) => {
@@ -20659,6 +20722,7 @@ class Game {
       return;
     }
     this.villageTick(p);
+    try { this.hallTick(p); } catch (e) { console.warn('hall', e); }
     for (const st of this.world.gen.structs.around(p.x, p.z, 40)) {
       // v2.6: the keepers of the new temples wake once, the first time someone comes near
       const gr = GUARD_RANGE[st.type];
@@ -21384,6 +21448,6 @@ else bootRegev();
 
 </script>
 <script src="/socket.io/socket.io.js" onerror="console.warn('[mp] no server')"></script>
-<script src="mp.js"></script>
+<script src="mp.js?v=36b"></script>
 </body>
 </html>
