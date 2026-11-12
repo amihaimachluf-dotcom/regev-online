@@ -1552,6 +1552,37 @@ Tex.def('mattress_side', (p, r) => {
     p.set(x, y, sh(c, 0.96 + r() * 0.06));
   }
 });
+// the two-block bed: the top of the head part (pillow) and of the foot part, each painted in the 4 turns, and the wooden end panel
+function bedTopPainter(head, rot) {
+  const red = [178, 48, 52], wood = [124, 88, 52], wood2 = [96, 66, 38];
+  return (p, r) => {
+    const g = [];
+    for (let y = 0; y < 16; y++) { g.push([]); for (let x = 0; x < 16; x++) g[y].push(sh(red, 0.94 + r() * 0.08)); }
+    const W = (x, y, c) => { g[y][x] = sh(c, 0.96 + r() * 0.06); };
+    for (let y = 0; y < 16; y++) { W(0, y, wood); W(15, y, wood); }
+    if (head) {
+      for (let x = 0; x < 16; x++) { W(x, 0, wood2); W(x, 1, wood); }
+      for (let y = 3; y < 9; y++) for (let x = 2; x < 14; x++) g[y][x] = sh((y === 3 || y === 8) ? [236, 232, 224] : [250, 248, 242], 0.97 + r() * 0.04);
+      for (let x = 2; x < 14; x++) g[9][x] = sh([160, 40, 46], 1);
+    } else {
+      for (let x = 0; x < 16; x++) { W(x, 15, wood2); W(x, 14, wood); }
+      for (let x = 1; x < 15; x++) { g[3][x] = sh([140, 34, 40], 1); g[4][x] = sh([204, 66, 70], 1); }
+      for (let y = 7; y < 13; y += 3) for (let x = 3; x < 14; x += 4) g[y][x] = [150, 40, 46];
+    }
+    for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+      const sx = rot === 0 ? x : rot === 1 ? y : rot === 2 ? 15 - x : 15 - y, sy = rot === 0 ? y : rot === 1 ? 15 - x : rot === 2 ? 15 - y : x;
+      p.set(x, y, g[sy][sx]);
+    }
+  };
+}
+for (let rot = 0; rot < 4; rot++) { Tex.def('bed_head_' + rot, bedTopPainter(true, rot)); Tex.def('bed_foot_' + rot, bedTopPainter(false, rot)); }
+Tex.def('bed_end', (p, r) => {
+  p.clear();
+  for (let y = 5; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const leg = (x < 2 || x > 13) && y > 9, c = leg ? [86, 58, 32] : (y === 5 ? [150, 108, 66] : (y % 3 === 0 ? [112, 78, 46] : [128, 92, 54]));
+    p.set(x, y, sh(c, 0.96 + r() * 0.06));
+  }
+});
 // ---- v1.3 blocks (kept before creature/item tiles: terrain stores tile indices in 8 bits) ----
 Tex.def('diamond_ore', (p, r) => ore(p, r, 5, [236, 255, 254], [118, 232, 226], [52, 160, 168], (q, rr) => paintStone(q, rr, [112, 112, 120])));
 function frame16(p, c, c2) { for (let i = 0; i < 16; i++) { p.set(i, 0, c); p.set(0, i, c); p.set(i, 15, c2 || c); p.set(15, i, c2 || c); } }
@@ -4103,6 +4134,7 @@ CONT_SIZE[B.chest] = 27; CONT_SIZE[B.hopper] = 5; CONT_SIZE[B.dropper] = 9; CONT
 const WALL_PLATES = new Set([B.painting_sunset, B.painting_hills, B.painting_sea, B.door_switch, B.canvas, B.rope_ladder, B.wall_clock]);
 for (let i = 0; i < 32; i++) WALL_PLATES.add(162 + i);
 const NEW_CARPETS = new Set([B.yellow_carpet, B.green_carpet, B.orange_carpet, B.purple_carpet]);
+function isBedHead(w, x, y, z) { const m = w.getMeta(x, y, z); return w.getBlock(x, y, z) === B.mattress && (!(m & 8) || !!(m & 4)); }
 function isDoorBlock(b) { return b === B.door || b === B.iron_door; }
 
 B_TARGET[B.portal] = 0; B_TARGET[B.portal_z] = 0;   // you look (and reach) right through a gate
@@ -4110,6 +4142,7 @@ const PORTALS = new Set([B.portal, B.portal_z]);
 // ---- v3.5: redstone helpers ----
 const RS_WIRE = B.redstone_wire;
 const H4_DIR = [0, 1, 4, 5], DIR_H4 = [0, 1, -1, -1, 2, 3];
+const BED_ROT = [0, 2, 1, 3];   // which turn of the bed's top picture puts the pillow toward the head, for each facing
 const RS_ATTACH = new Uint8Array(256), RS_LINK = new Uint8Array(256), RS_SRC = new Uint8Array(256), RS_ANY = new Uint8Array(256), RS_EVAL = new Uint8Array(256);
 for (const k of ['redstone_wire', 'rs_torch', 'rs_torch_off', 'lever', 'button', 'pressure_plate', 'repeater', 'comparator']) RS_ATTACH[B[k]] = 1;
 for (const k of ['redstone_wire', 'rs_torch', 'rs_torch_off', 'lever', 'button', 'pressure_plate', 'redstone_block', 'comparator', 'target', 'daylight_sensor']) RS_LINK[B[k]] = 1;
@@ -4782,7 +4815,7 @@ recipe('furnace', 1, [['stone', 8]], 'bench', 'build');
 recipe('stone_bricks', 4, [['stone', 4]], 'bench', 'build');
 recipe('sandstone', 1, [['sand', 4]], 'bench', 'build');
 recipe('lamp', 1, [['crystal', 2], ['glass', 1]], 'bench', 'build');
-recipe('mattress', 1, [['feather', 3], ['planks', 3]], 'bench', 'build');
+recipe('mattress', 1, [['wool', 3], ['planks', 3]], 'bench', 'build');
 recipe('iron_ingot', 1, [['raw_iron', 1], ['coal', 1]], 'furnace', 'basic');
 recipe('coal', 1, [['#logs', 1]], 'furnace', 'basic');
 recipe('glass', 4, [['sand', 4], ['coal', 1]], 'furnace', 'build');
@@ -6874,7 +6907,7 @@ function buildHouse(p, hx, hy, hz, f, W, D, ground, occ, K) {
   if (W > 2) P(0, 2, -D, B.glass);
   // furniture
   P(-(W - 1), 1, -(D - 1), B.chest, dirOf(0, 1) | (2 << 2));
-  P(W - 1, 1, -(D - 1), B.mattress);
+  { const bf = dirOf(0, -1); P(W - 1, 1, -(D - 1), B.mattress, bf | 8 | 4); P(W - 1, 1, -(D - 2), B.mattress, bf | 8); }   // a two-block bed, the pillow against the back wall
   P(0, 1, -(D - 1), VL_GEN_ST[hash2(hx * 3 + hz, hy, 0x57a7) % VL_GEN_ST.length]);   // v3.6: the workstation that gives the household its trade
   if (r() < 0.65) P(0, 2, -(D - 1), B.torch, dirOf(0, -1) + 1);
   if (W > 2) { P(W - 1, 1, D - 1, B.workbench); if (r() < 0.5) P(-(W - 1), 1, D - 1, B.furnace); }
@@ -7068,6 +7101,10 @@ class World extends Emitter {
       c.height[hi] = yy + 1;
     }
     if (!opts || opts.record !== false) this.recordMod(c, i, id, meta);
+    if (old === B.mattress && (oldMeta & 8) && !(id === B.mattress && (meta & 8))) {   // one half of a bed went: the other goes with it
+      const f = oldMeta & 3, s = (oldMeta & 4) ? -1 : 1, qx = x + H4[f][0] * s, qz = z + H4[f][1] * s, qm = this.getMeta(qx, y, qz);
+      if (this.getBlock(qx, y, qz) === B.mattress && (qm & 8) && (qm & 3) === f && (qm & 4) !== (oldMeta & 4)) this.setBlock(qx, y, qz, 0, 0, { urgent: true });
+    }
     if (old === B.sapling) this.saplings.delete(packPos(x, y, z));
     if (id === B.sapling) this.saplings.add(packPos(x, y, z));
     if (old === B.obsidian && id !== B.obsidian) this.emit('frameBroken', x, y, z);
@@ -7710,6 +7747,7 @@ const T_CANVAS_BLANK = Tex.id('canvas_blank'), T_CANVAS = Array.from({ length: 3
 const T_SIGN = Tex.id('sign'), T_SIGN_POST = Tex.id('sign_post'), T_HIVE_FRONT = Tex.id('hive_front'), T_HIVE_HONEY = Tex.id('hive_front_honey');
 const FENCE_LINK = (nb) => B_MODEL[nb] === MODEL.FENCE || B_MODEL[nb] === MODEL.GATE || (B_SOLID[nb] && B_OPAQUE[nb]);
 if (Math.max(...B_TEX) > 1022) console.error('block tiles must stay below 1023 (terrain stores 10 bits)');
+const T_BED_HEAD = [0, 1, 2, 3].map((i) => Tex.id('bed_head_' + i)), T_BED_FOOT = [0, 1, 2, 3].map((i) => Tex.id('bed_foot_' + i)), T_BED_END = Tex.id('bed_end'), T_BED_SIDE = Tex.id('mattress_side'), T_BED_BOTTOM = Tex.id('planks');
 const T_LANTERN = Tex.id('lantern'), T_CAMP_LOG = Tex.id('campfire_log'), T_CAMP_TOP = Tex.id('campfire_top'), T_FIRE = Tex.id('fire');
 
 class Mesher {
@@ -7956,6 +7994,7 @@ class Mesher {
           this.box(this.cutout, x * 16 + 7 + dx, y * 16 + 3, z * 16 + 7 + dz, x * 16 + 9 + dx, y * 16 + 13, z * 16 + 9 + dz, 0b111111, T_TORCH_WALL, T_TORCH_TOP, sky, blk, 3, T_TORCH_BOTTOM);
         }
       } else if (model === MODEL.SLAB) {
+        if (b === B.mattress && (pm[pi] & 8)) { this.bedMesh(pm[pi], pb, pi, x, y, z, sky, blk); continue; }
         const up = B_SHAPED[b] && (pm[pi] & 1);   // v3.3: an upside-down (upper-half) slab
         let mask = up ? (1 << 3) : (1 << 2);
         for (let d = 0; d < 6; d++) {
@@ -7976,6 +8015,17 @@ class Mesher {
         const m = pm[pi], sb = sideBox(doorSide(m), 3 / 16), L = b === B.iron_door ? ((m & 8) ? T_IDOOR_TOP : T_IDOOR_BOTTOM) : ((m & 8) ? T_DOOR_TOP : T_DOOR_BOTTOM);
         this.box(this.cutout, x * 16 + sb[0] * 16, y * 16 + sb[1] * 16, z * 16 + sb[2] * 16, x * 16 + sb[3] * 16, y * 16 + sb[4] * 16, z * 16 + sb[5] * 16, 0b111111, L, L, sky, blk, 0, L);
       } else if (model >= MODEL.STAIRS) this.special2(b, model, pi, x, y, z, sky, blk);
+    }
+  }
+  // the two-block bed: meta = direction foot→head (H4 index) | 4 for the head part | 8 (marks the two-block bed)
+  bedMesh(m, pb, pi, x, y, z, sky, blk) {
+    const f = m & 3, head = !!(m & 4), X0 = x * 16, Y0 = y * 16, Z0 = z * 16;
+    const endF = head ? H4_DIR[f] : H4_DIR[f ^ 1], innerF = head ? H4_DIR[f ^ 1] : H4_DIR[f];
+    const top = (head ? T_BED_HEAD : T_BED_FOOT)[BED_ROT[f]];
+    for (let d = 0; d < 6; d++) {
+      if (d === innerF) continue;
+      if (d !== 2) { const nb = pb[pi + (d & 1 ? -1 : 1) * AXIS_STRIDE[d >> 1]]; if (B_OPAQUE[nb]) continue; }
+      this.box(this.cutout, X0, Y0, Z0, X0 + 16, Y0 + 9, Z0 + 16, 1 << d, d === endF ? T_BED_END : T_BED_SIDE, top, sky, blk, 0, T_BED_BOTTOM);
     }
   }
   // v3.5: redstone parts
@@ -12770,7 +12820,7 @@ class Villager extends Mob {
     const gy = w.surfaceY(hx, hz) + 1;
     let bed = null, bd = 99;
     for (let dx = -7; dx <= 7; dx++) for (let dz = -7; dz <= 7; dz++) for (let dy = -3; dy <= 3; dy++) {
-      if (w.getBlock(hx + dx, gy + dy, hz + dz) !== B.mattress) continue;
+      if (!isBedHead(w, hx + dx, gy + dy, hz + dz)) continue;
       const d = Math.hypot(dx, dz); if (d < bd) { bd = d; bed = [hx + dx, gy + dy, hz + dz]; }
     }
     let door = null, dd = 99;
@@ -15691,6 +15741,11 @@ class Player {
         meta = d + 1;
         if (!w.torchOk(px, py, pz, meta)) return;
       }
+    } else if (block === B.mattress) {
+      const hx = px + H4[facing][0], hz = pz + H4[facing][1], hc = w.getBlock(hx, py, hz);
+      if (!w.isLoaded(hx, hz) || (hc !== 0 && !B_REPLACE[hc]) || hc === B.water) { g.ui.toast('למיטה צריך מקום של שני בלוקים'); return; }
+      if (!w.solidAt(px, py - 1, pz) || !w.solidAt(hx, py - 1, hz)) { g.ui.toast('מיטה צריכה רצפה מוצקה מתחתיה'); return; }
+      meta = facing | 8;   // you place the foot; the head goes in front of you
     } else if (B_SUPPORT[block]) {
       if (!w.supported(px, py, pz, block, meta)) {
         g.ui.toast(block === B.stalactite ? 'נטיף נתלה מתקרה מוצקה' : (block === B.reeds ? 'קנה סוף צומח על חול, אדמה או דשא'
@@ -15706,6 +15761,7 @@ class Player {
     }
     w.setBlock(px, py, pz, block, meta, { urgent: true });
     if (isDoorBlock(block)) w.setBlock(px, py + 1, pz, block, meta | 8, { urgent: true });
+    if (block === B.mattress && (meta & 8)) w.setBlock(px + H4[meta & 3][0], py, pz + H4[meta & 3][1], block, meta | 4, { urgent: true });
     inv.consumeHeld(1);
     if (block === B.rope_ladder && face !== -1) {   // a rope ladder unrolls down the wall as far as you have rope
       for (let yy = py - 1, n = 0; n < 12 && yy > 0; yy--, n++) {
@@ -17217,7 +17273,7 @@ const TIPS = [
   'מקש V מחליף למבט מגוף שלישי — ככה רואים את השריון עליכם.',
   'מכוש עץ חוצב אבן. כדי לחצוב ברזל וגבישים צריך מכוש אבן.',
   'בכבשן מתיכים ברזל, צולים בשר ומייצרים זכוכית.',
-  'נוצות של דוכיפת וקרשים יוצרים מיטה — שינה עליה מדלגת על הלילה.',
+  'צמר כבשה וקרשים יוצרים מיטה — שינה עליה מדלגת על הלילה.',
   'כשמתכופפים לא נופלים מקצוות. שימושי על גשרים ועל צוקים.',
   'הגבישים הזוהרים מסתתרים עמוק מתחת לאדמה, ליד שכבות הבזלת.',
   'כל עולם נשמר אוטומטית. אותו זרע תמיד יוצר את אותו עולם.',
@@ -19678,6 +19734,7 @@ class Game {
     w.loadMods(mods || {});
     w.loadContainers(meta.containers);
     this.discovered = new Set(meta.discovered || []);
+    this.hallClear = Object.assign({}, meta.hallClear || {}); this.hallAlive = {};
     this.achievements = new Set(meta.achievements || []);
     this.loadMap(meta.mapdata);
     this.waypoints = Array.isArray(meta.waypoints) ? meta.waypoints.slice(0, 12) : [];
@@ -20283,18 +20340,24 @@ class Game {
     const mp = window.__mp; if (mp && mp.connected && !mp.isHost) return;                          // only the host of a shared world makes them
     let n = 0;
     for (const e of this.entities) if (e.hall && !e.dead && !e.remove && Math.abs(e.x - cx) < 14 && Math.abs(e.z - cz) < 14 && Math.abs(e.y - fy) < 14) n++;
-    if (n >= 7) return;
-    const key = st.key, now = performance.now();
-    if (!this.hallT) this.hallT = {};
-    const first = !this.hallT[key]; if (!first && now - this.hallT[key] < 4000) return;
-    this.hallT[key] = now;
-    let want = first ? 7 - n : 1, tries = 0;
+    // the 7 spiders come back 8 minutes (real time) after the last one of them was killed.
+    // hallClear[key]: undefined = never filled, 0 = filled and alive, a timestamp = the moment they were all dead
+    const key = st.key, now = Date.now(), WAIT = 8 * 60 * 1000;
+    if (!this.hallClear) this.hallClear = {}; if (!this.hallAlive) this.hallAlive = {};
+    const rec = this.hallClear[key];
+    if (n > 0) { this.hallAlive[key] = true; this.hallClear[key] = 0; return; }              // some are alive: nothing to do (no refills one by one)
+    if (rec > 0) { if (now - rec < WAIT) return; }                                           // all dead, still waiting out the 8 minutes
+    else if (rec === 0 && this.hallAlive[key]) { this.hallClear[key] = now; this.hallAlive[key] = false; return; }   // I just watched the last one die: start waiting
+    // never filled, or filled before this session and none are around (reload), or the wait is over: bring all 7
+    const first = !(rec > 0);
+    let want = 7, tries = 0, made = 0;
     while (want > 0 && tries++ < 60) {
       const a = Math.random() * Math.PI * 2, r = 3 + Math.random() * 7, x = Math.floor(cx + Math.cos(a) * r), z = Math.floor(cz + Math.sin(a) * r);
       if (!first && ps.some((p) => Math.hypot(x + 0.5 - p.x, z + 0.5 - p.z) < 6 && Math.abs(p.y - fy) < 6)) continue;   // never pop in next to the player
       if (B_SOLID[w.getBlock(x, fy, z)] || B_FLUID[w.getBlock(x, fy, z)] || B_SOLID[w.getBlock(x, fy + 1, z)] || !B_SOLID[w.getBlock(x, fy - 1, z)]) continue;
-      const s = new Spider(this, x + 0.5, fy, z + 0.5); s.hall = true; s.persist = true; this.addEntity(s); want--;
+      const s = new Spider(this, x + 0.5, fy, z + 0.5); s.hall = true; s.persist = true; this.addEntity(s); want--; made++;
     }
+    if (made) { this.hallClear[key] = 0; this.hallAlive[key] = true; }
   }
   spawnGuards(st) {
     const w = this.world, f = structTurn(w.gen, st);
@@ -20506,7 +20569,7 @@ class Game {
     const list = [], px = Math.floor(plaza[0]), pz = Math.floor(plaza[1]), y0 = Math.floor(y);
     for (let x = px - 32; x <= px + 32; x++) for (let z = pz - 32; z <= pz + 32; z++) {
       if (!w.isLoaded(x, z)) continue;
-      for (let yy = y0 - 8; yy <= y0 + 8; yy++) { const b = w.getBlock(x, yy, z); if (beds ? b === B.mattress : VL_STATION[b] !== undefined) list.push([x, yy, z, b]); }
+      for (let yy = y0 - 8; yy <= y0 + 8; yy++) { const b = w.getBlock(x, yy, z); if (beds ? isBedHead(w, x, yy, z) : VL_STATION[b] !== undefined) list.push([x, yy, z, b]); }
     }
     this._vls.set(key, { gen, t: performance.now(), list });
     return list;
@@ -20853,7 +20916,7 @@ class Game {
         stats: this.stats,
         armor: p.inventory.serializeArmor(),
         containers: this.world.serializeContainers(),
-        discovered: Array.from(this.discovered),
+        discovered: Array.from(this.discovered), hallClear: this.hallClear || {},
         signs: this.world.serializeSigns(),
         rs: this.world.rs ? this.world.rs.serialize() : null,
         death: this.deathMark || null,

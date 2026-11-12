@@ -378,10 +378,11 @@
 
     // ---------- time & weather ----------
     const WKEYS = ['rain', 'target', 'storm', 'khamsin', 'dustDir', 'wind'];
-    function envNow() { const W = game.weather || {}, w = {}; for (const k of WKEYS) if (W[k] !== undefined) w[k] = W[k]; return { t: game.timeOfDay, day: game.day, w }; }
+    function envNow() { const W = game.weather || {}, w = {}; for (const k of WKEYS) if (W[k] !== undefined) w[k] = W[k]; return { t: game.timeOfDay, day: game.day, w, hc: game.hallClear }; }
     function applyEnv(d, asHost) {
       if (!game.world || !d) return;
       if (isFinite(d.t)) game.timeOfDay = d.t; if (isFinite(d.day)) game.day = d.day;
+      if (d.hc && !asHost) game.hallClear = Object.assign({}, d.hc);   // when did the temple spiders all die (so a new host keeps the same 8-minute timer)
       if (d.w && game.weather) { Object.assign(game.weather, d.w); if (!asHost) { game.weather.timer = 1e9; game.weather.khamsinT = 1e9; } }
     }
 
